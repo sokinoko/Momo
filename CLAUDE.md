@@ -51,6 +51,7 @@ for t in tests/test_*.js; do node "$t" | tail -1; done
 ## 글꼴
 - 모의고사: 발문·선지 나눔고딕 `--font-exam`, 제시문 나눔명조 `--font-exam-ps`
 - 기출 OX 카드: 나눔고딕 / 필기(`.outline` `.cmp-table` 사상가 카드): IBM Plex Sans KR `--font-note`
+- 홈 첫 카드 숫자·라벨: 개구 `--font-hand`. 손글씨라 작아 보여서 다른 곳보다 크게 잡았다. 그림(`.hero-kao`)은 제외
 - 흐름으로 읽기: 노토 세리프(그대로 둔다). 구글 폰트 링크는 `build.py` 머리에 있다.
 
 ## 그 밖에

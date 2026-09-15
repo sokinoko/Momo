@@ -35,6 +35,8 @@
   --font-exam-ps: "Nanum Myeongjo", "NanumMyeongjo", "나눔명조", "AppleMyungjo", "Batang", serif;
   /* 필기노트(개념·심화 줄, 비교표, 곁들여 나오는 사상가) — IBM Plex Sans KR */
   --font-note: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  /* 홈 첫 카드 숫자·라벨 손글씨 — 개구. 없으면 기존 고딕으로 떨어진다 */
+  --font-hand: "Gaegu", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 
   --radius:10px;
 }
@@ -173,8 +175,8 @@ body{
 .hero-stats{ display:flex; gap:0; margin-top:16px; border-top:1px solid var(--rule); padding-top:14px;}
 .hero-stat{ flex:1; text-align:center; border-left:1px solid var(--rule); }
 .hero-stat:first-child{ border-left:none; }
-.hero-stat b{ display:block; font-family:var(--font-serif); font-size:20px; font-weight:700;}
-.hero-stat span{ font-size:10.5px; color:var(--ink-soft); font-weight:600; }
+.hero-stat b{ display:block; font-family:var(--font-hand); font-size:26px; font-weight:700; line-height:1.15; }
+.hero-stat span{ font-family:var(--font-hand); font-size:13px; color:var(--ink-soft); font-weight:700; }
 
 .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }

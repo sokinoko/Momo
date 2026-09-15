@@ -53,6 +53,8 @@ HEAD = '''<!DOCTYPE html>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700&amp;display=swap"/>
 <!-- 모의고사 시험지용 — 발문·선지 나눔고딕, 제시문 나눔명조 / 필기노트 — IBM Plex Sans KR -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&amp;family=Nanum+Myeongjo:wght@400;700&amp;family=IBM+Plex+Sans+KR:wght@400;500;700&amp;display=swap"/>
+<!-- 홈 첫 카드(진도·연속 학습·오늘 푼 선지) 손글씨 — 개구 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&amp;display=swap"/>
 
 <!-- PWA: iOS 홈 화면 추가 시 독립 실행(standalone) -->
 <meta name="apple-mobile-web-app-capable" content="yes"/>
