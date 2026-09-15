@@ -51,7 +51,10 @@ for t in tests/test_*.js; do node "$t" | tail -1; done
 ## 글꼴
 - 모의고사: 발문·선지 나눔고딕 `--font-exam`, 제시문 나눔명조 `--font-exam-ps`
 - 기출 OX 카드: 나눔고딕 / 필기(`.outline` `.cmp-table` 사상가 카드): IBM Plex Sans KR `--font-note`
-- 홈 첫 카드 숫자·라벨: 개구 `--font-hand`. 손글씨라 작아 보여서 다른 곳보다 크게 잡았다. 그림(`.hero-kao`)은 제외
+- 홈 첫 카드 숫자·라벨: 개구 `--font-hand`. 손글씨라 작아 보여서 다른 곳보다 크게 잡았다
+- 그림 안의 한글도 개구. `kaoHtml()`이 그릴 때만 글자마다 `.kao-ko`로 감싼다 —
+  `HERO_KAO` 자체는 손대지 않는다. 개구 한글이 전각보다 좁아 상자가 어긋나므로
+  `.kao-ko`는 1em 칸을 유지하고 글자만 `transform:scale`로 키운다(칸을 바꾸면 그림이 깨진다)
 - 흐름으로 읽기: 노토 세리프(그대로 둔다). 구글 폰트 링크는 `build.py` 머리에 있다.
 
 ## 그 밖에

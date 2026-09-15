@@ -1181,3 +1181,13 @@ mark.ps-clue{
   font-size:15px; line-height:1.3; color:var(--ink);
 }
 .hero-kao.one{ font-size:26px; line-height:1.2; }
+/* 그림 안의 한글만 손글씨. 기호는 위 .hero-kao 폰트 그대로 둔다.
+   개구 한글은 전각보다 좁아서 그냥 두면 상자 테두리가 어긋난다.
+   한 글자를 전각과 같은 1em 칸에 넣어 원래 칸 맞춤을 지킨다. */
+.kao-ko{
+  font-family:var(--font-hand);
+  display:inline-block; width:1em; text-align:center;
+  /* 개구는 같은 크기에서 작아 보인다. transform 은 자리를 안 바꾸니
+     1em 칸을 그대로 둔 채 글자만 키울 수 있다 */
+  transform:scale(1.18);
+}
