@@ -146,6 +146,13 @@ const HERO_KAO = [
  "　 ∧_∧\n（ ˘ω˘ ）쿨쿨…\n　 (つ　つ　 쉬었다 가도 돼\n　 しーＪ",
  "　 ᘏ⑅ᘏ\n（  ˶'ᵕ'˶ ）💗\n（ っ 　 ）っ　　 잘했어\n　 ＵＵ"
 ];
+// 그림 안의 한글만 손글씨로 바꾼다. HERO_KAO 자체는 손대지 않고 그릴 때만 감싼다.
+// 기호·전각 공백·칸 맞춤 문자는 감싸지 않아야 모양이 덜 틀어진다.
+function kaoHtml(s){
+  return escHtml(s).replace(/[\uAC00-\uD7A3\u3131-\u318E]/g, function(m){
+    return '<span class="kao-ko">' + m + '</span>';
+  });
+}
 // 한 줄짜리는 크게, 여러 줄짜리는 보통 크기로
 function heroKaoClass(){
   return 'hero-kao' + (HERO_KAO[heroKaoIdx()].indexOf('\n') < 0 ? ' one' : '');
@@ -163,7 +170,7 @@ function nextHeroKao(){
   advanceHeroKao();
   const el = document.getElementById('heroKao');
   if(!el){ render(); return; }
-  el.textContent = HERO_KAO[heroKaoIdx()];
+  el.innerHTML = kaoHtml(HERO_KAO[heroKaoIdx()]);
   el.className = heroKaoClass();
   fitHeroKao();
 }
@@ -190,7 +197,7 @@ function renderHome(){
   <div class="screen">
     <div class="hero hard-box">
       <button class="hero-kao-wrap" onclick="nextHeroKao()" aria-label="다음 그림">
-        <pre id="heroKao" class="${heroKaoClass()}">${escHtml(HERO_KAO[heroKaoIdx()])}</pre>
+        <pre id="heroKao" class="${heroKaoClass()}">${kaoHtml(HERO_KAO[heroKaoIdx()])}</pre>
       </button>
       <div class="hero-stats">
         <div class="hero-stat"><b>${prog.pct}%</b><span>전체 진도</span></div>
