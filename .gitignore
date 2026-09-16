@@ -2,7 +2,8 @@
 ethics_note.html
 _site/
 _*.html
-# ps_add.py 가 남기는 백업
+# 입력 스크립트가 남기는 백업
 passages.backup-*.json
+ox_items.backup-*.json
 __pycache__/
 .DS_Store
