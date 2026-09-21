@@ -49,7 +49,34 @@ OX_ITEMS.concat(CMP_ITEMS).forEach(o=>{ oxById[o.id] = o; });
 const pool = mockPool();
 ok(pool.usable.length >= MOCK_N, '출제 가능 사상가 ' + pool.usable.length + '명 (최소 ' + MOCK_N + ')');
 
+// 삼중 판정 색인 — 조합별로 {문장: {사람: O/X}}
+const ZONE_PAT = {
+  '갑과 을과 병의 공통 입장':'OOO', '갑만의 입장':'OXX', '을만의 입장':'XOX',
+  '병만의 입장':'XXO', '갑과 을만의 공통 입장':'OOX',
+  '을과 병만의 공통 입장':'XOO', '갑과 병만의 공통 입장':'OXO',
+};
+const ARROW = { A:[0,1], B:[1,0], C:[1,2], D:[2,1], E:[2,0], F:[0,2] };
+let TRIO_IDX = null;
+function trioSet(who){
+  if(!TRIO_IDX){
+    TRIO_IDX = {};
+    const names = mockNameList();
+    CMP_ITEMS.forEach(it=>{
+      if(it.set !== '삼중-자체') return;
+      const sp = mockSplit(it.text, names);
+      if(!sp) return;
+      (TRIO_IDX[sp.body] || (TRIO_IDX[sp.body] = {}))[sp.name] = it.answer;
+    });
+  }
+  const out = {};
+  Object.keys(TRIO_IDX).forEach(b=>{
+    const m = TRIO_IDX[b];
+    if(who.every(n=> m[n])) out[b] = m;
+  });
+  return out;
+}
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
+let trioVennQ = 0, critQ = 0;
 for(let d=1; d<=40; d++){
   TODAY = '2026-' + String((d % 12) + 1).padStart(2,'0') + '-' + String((d % 28) + 1).padStart(2,'0');
   const set = buildMockSet();
@@ -57,10 +84,16 @@ for(let d=1; d<=40; d++){
   const names = [];
   set.forEach(q=>{
     if(q.type === 'trio') names.push.apply(names, q.who);
+    else if(q.type === 'trioVenn' || q.type === 'critique') names.push(q.who[0], q.who[1], q.who[2]);
     else if(q.type === 'pair' || q.type === 'box' || q.type === 'venn' || q.type === 'algo') names.push(q.a, q.b);
     else names.push(q.name);
   });
   ok(new Set(names).size === names.length, TODAY + ' 사상가 중복 (' + names.length + '명 중 ' + new Set(names).size + '명)');
+  // 시험지 구성 — 순서도 두 문항 이상, 벤다이어그램(2중이든 3중이든) 한 문항 이상
+  const nAlgo = set.filter(q=> q.type === 'algo').length;
+  const nVenn = set.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length;
+  ok(nAlgo >= 2, TODAY + ' 순서도가 ' + nAlgo + '문항 (두 문항 이상이어야 한다)');
+  ok(nVenn >= 1, TODAY + ' 벤다이어그램이 ' + nVenn + '문항 (한 문항 이상이어야 한다)');
   set.forEach((q,qi)=>{
     totalQ++;
     const tag = TODAY + ' ' + (qi+1) + '번';
@@ -152,6 +185,41 @@ for(let d=1; d<=40; d++){
         ok(oxById[c.id].answer === (ci === q.ans ? 'O' : 'X'), tag + ' ' + (ci+1) + '선지 구조 오류');
         ok(oxById[c.id].text.indexOf(L[c.label]) === 0, tag + ' ' + (ci+1) + '선지 라벨 오류');
       });
+    } else if(q.type === 'trioVenn'){
+      trioVennQ++;
+      ok(new Set(q.who).size === 3, tag + ' 갑·을·병 중복');
+      ok(q.items.length === 4, tag + ' 보기 개수');
+      ok(new Set(q.items.map(x=>x.body)).size === 4, tag + ' 보기 문장 중복');
+      ok(q.zones.length === 4 && q.zones[3].lab.indexOf('갑과 을과 병') === 0,
+         tag + ' D는 언제나 셋 모두여야 한다');
+      const tset = trioSet(q.who);
+      q.items.forEach(it=>{
+        const p = tset[it.body];
+        ok(!!p, tag + ' ' + it.mark + ' 삼중 판정이 없는 문장');
+        if(!p) return;
+        const pat = p[q.who[0]] + p[q.who[1]] + p[q.who[2]];
+        const want = ZONE_PAT[q.zones.find(z=>z.letter === it.zone).lab];
+        ok((pat === want) === it.ok, tag + ' ' + it.mark + ' 영역 배정과 O/X 불일치');
+      });
+      const t = q.items.map((x,ix)=>x.ok?ix:-1).filter(x=>x>=0).join(',');
+      ok(q.opts[q.ans].join(',') === t, tag + ' 정답 조합 불일치');
+    } else if(q.type === 'critique'){
+      critQ++;
+      ok(new Set(q.who).size === 3, tag + ' 갑·을·병 중복');
+      ok(q.choices.length === 5, tag + ' 선지 개수');
+      ok(new Set(q.choices.map(c=>c.arrow)).size === 5, tag + ' 화살표 중복');
+      ok(new Set(q.choices.map(c=>c.crit)).size === 5, tag + ' 비판 문장 중복');
+      const tset = trioSet(q.who);
+      q.choices.forEach((c,ci)=>{
+        const p = tset[c.body];
+        ok(!!p, tag + ' ' + (ci+1) + '선지 삼중 판정 없음');
+        if(!p) return;
+        // X 가 Y 를 비판할 수 있는 것은 X 가 O 이고 Y 가 X 일 때뿐이다
+        const valid = p[c.from] === 'O' && p[c.to] === 'X';
+        ok(valid === (ci === q.ans), tag + ' ' + (ci+1) + '선지 비판 성립 여부가 정답과 어긋남');
+        const ar = ARROW[c.arrow];
+        ok(c.from === q.who[ar[0]] && c.to === q.who[ar[1]], tag + ' ' + (ci+1) + '선지 화살표 방향 오류');
+      });
     } else {
       soloQ++;
       ok(q.ps.name === q.name, tag + ' 제시문 사상가 불일치');
@@ -172,7 +240,8 @@ for(let d=1; d<=40; d++){
   TODAY = '2026-10-05';
   const set = buildMockSet();
   const bi = set.findIndex(q=> q.type === 'box' || q.type === 'venn' || q.type === 'algo');
-  const si = set.findIndex(q=> !(q.type === 'box' || q.type === 'venn' || q.type === 'algo'));
+  // 보기형이 늘었으니 5지선다는 choices 를 가진 것으로 고른다
+  const si = set.findIndex(q=> !!q.choices && q.choices.length === 5);
   ok(bi >= 0 && si >= 0, '별표 테스트용 문항 없음');
   const run = { picks:[], guess:[] };
   set.forEach((q,i)=>{ run.picks[i] = q.ans; });          // 전부 맞힘
@@ -289,7 +358,8 @@ const b = JSON.stringify(buildMockSet().map(q=>[q.name,q.type,q.ans]));
 ok(a === b, '같은 날 재생성 결과가 다름');
 
 console.log('검사한 문항 ' + totalQ + '개 — 단독 ' + soloQ + ' · 갑을 ' + pairQ + ' · 보기 ' + boxQ +
-            ' · 벤 ' + vennQ + ' · 순서도 ' + algoQ + ' · 삼중 ' + trioQ);
+            ' · 벤 ' + vennQ + ' · 순서도 ' + algoQ + ' · 삼중 ' + trioQ +
+            ' · 3중벤 ' + trioVennQ + ' · 비판 ' + critQ);
 console.log('출제 가능 사상가 ' + pool.usable.length + '명 · 벤다이어그램 쌍 ' + pool.venn.length + '개');
 if(fail){ console.error('실패 ' + fail + '건'); process.exit(1); }
 console.log('=== 모의고사 테스트 완료 ===');

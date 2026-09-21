@@ -652,7 +652,7 @@ function loadStore(){
 
 const MOCK_N = 20;
 // 유형 비율. 남는 몫이 pair(갑·을 5지선다)
-const MOCK_MIX = { right:0.28, wrong:0.20, box:0.16, venn:0.06, algo:0.06, trio:0.06 };
+const MOCK_MIX = { right:0.26, wrong:0.18, box:0.15, venn:0.05, algo:0.05, trio:0.06, critique:0.05 };
 
 let MOCK_CACHE = null;
 
@@ -747,6 +747,7 @@ function mockSourceItems(){
 
 function mockPool(){
   if(MOCK_CACHE) return MOCK_CACHE;
+  MOCK_TRIO_CACHE = null;
   const names = mockNameList();
   const byName = {}, pairs = {}, diffs = {};
 
@@ -847,12 +848,57 @@ function mockMainTopic(name){
 }
 
 // 같은 날 · 같은 세트 번호면 언제 만들어도 같은 20문항이 나온다.
+// 삼중 판정이 갖춰진 조합만 3중 벤·비판 화살표를 만들 수 있다
+function mockTrioReady(){
+  const sets = mockTrioSets();
+  return Object.keys(sets).map(k=> sets[k].who);
+}
+
+/* 시험지 구성 — 한 세트에 반드시 들어가야 하는 것들.
+   순서도 두 문항, 벤다이어그램(2중이든 3중이든) 한 문항.
+   나머지는 지금까지처럼 무작위로 채운다. 재료가 모자라면 그만큼만 넣는다. */
+const MOCK_QUOTA = { algo:2, anyVenn:1 };
+
+function buildMockQuota(pool, rng, used, qs){
+  // 쌍이 있어야 만들 수 있는 순서도를 먼저 잡는다. 3중 벤은 삼중 판정 묶음에서
+  // 따로 오므로 뒤로 미뤄도 재료가 줄지 않는다.
+  const takePair = (make)=>{
+    const cands = shuffleSeeded(pool.venn.filter(p=> !used[p[0]] && !used[p[1]]), rng);
+    for(let i=0;i<cands.length;i++){
+      const p = cands[i];
+      const q = make(p[0], p[1]);
+      if(q){ used[p[0]] = 1; used[p[1]] = 1; return q; }
+    }
+    return null;
+  };
+
+  for(let k=0;k<MOCK_QUOTA.algo;k++){
+    const q = takePair((a,b)=> buildAlgoQ(a, b, mockMainUnit(a), rng, null));
+    if(!q) break;
+    qs.push(q);
+  }
+
+  // 벤다이어그램 한 문항 — 3중이 되면 3중을 먼저 본다
+  let venn = null;
+  const trios = shuffleSeeded(mockTrioReady(), rng);
+  for(let i=0;i<trios.length && !venn;i++){
+    const t = trios[i];
+    if(t.some(n=> used[n] || !pool.byName[n])) continue;
+    venn = buildTrioVennQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
+    if(venn) t.forEach(n=> used[n] = 1);
+  }
+  if(!venn) venn = takePair((a,b)=> buildVennQ(a, b, mockMainUnit(a), rng, null));
+  if(venn) qs.push(venn);
+}
+
 function buildMockSet(){
   const pool = mockPool();
   const rng = mulberry32(seedFromDate(mockSeedStr()));
   const order = shuffleSeeded(pool.usable, rng);
   const used = {};
   const qs = [];
+
+  buildMockQuota(pool, rng, used, qs);
 
   for(let i=0;i<order.length && qs.length < MOCK_N;i++){
     const n = order[i];
@@ -862,7 +908,7 @@ function buildMockSet(){
     const canWrong = b.X.length >= 1 && b.O.length >= 4;
 
     let roll = rng(), acc = 0, type = 'pair';
-    const order2 = ['right','wrong','box','venn','algo','trio'];
+    const order2 = ['right','wrong','box','venn','algo','trio','critique'];
     for(let t=0;t<order2.length;t++){
       acc += MOCK_MIX[order2[t]];
       if(roll < acc){ type = order2[t]; break; }
@@ -887,6 +933,18 @@ function buildMockSet(){
         const p = shuffleSeeded(cands, rng)[0];
         const q = buildAlgoQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
         if(q){ qs.push(q); used[p[0]] = 1; used[p[1]] = 1; continue; }
+      }
+      type = 'pair';
+    }
+
+    // 서로에게 제기할 수 있는 비판 — 삼중 판정이 갖춰진 조합에서만
+    if(type === 'critique'){
+      const t = shuffleSeeded(mockTrioReady().filter(w=>
+        w.every(m=> !used[m] && pool.byName[m]) && (w.indexOf(n) >= 0)), rng)[0]
+        || shuffleSeeded(mockTrioReady().filter(w=> w.every(m=> !used[m] && pool.byName[m])), rng)[0];
+      if(t){
+        const q = buildCritiqueQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
+        if(q){ qs.push(q); t.forEach(m=> used[m] = 1); continue; }
       }
       type = 'pair';
     }
@@ -1022,6 +1080,7 @@ function buildPairQ(a, b, unit, rng, pairTopic){
 
   const mk = (o, label, who) => (o ? Object.assign({}, o, { label:label, who:who }) : null);
   const use = { A:0, B:0, P:0 };
+  const seenBody = {};
   const slot = [];
   for(let i=0;i<5;i++){
     const z = plan[i], isAns = (i === ans);
@@ -1030,9 +1089,13 @@ function buildPairQ(a, b, unit, rng, pairTopic){
     else if(z === 'B') src = isAns ? BO : BX;
     else src = isAns ? prO : prX;
     const k = z + (isAns ? 'T' : 'F');
-    const idx = use[k] || 0; use[k] = idx + 1;
+    let idx = use[k] || 0;
+    // 사람만 다르고 문장이 같은 선지가 한 문항에 두 번 들어가지 않게 한다
+    while(src[idx] && seenBody[mockPlainBody(src[idx])]) idx++;
+    use[k] = idx + 1;
     const pick = src[idx];
     if(!pick) return null;
+    seenBody[mockPlainBody(pick)] = 1;
     slot.push(mk(pick, z === 'A' ? L1 : (z === 'B' ? L2 : LB), z === 'P' ? (a + '·' + b) : (z === 'A' ? a : b)));
   }
 
@@ -1061,6 +1124,9 @@ function mockOptSet(rng){
   return { idx:ansC, opts:opts, ans:opts.findIndex(c=> MOCK_KEY(c) === MOCK_KEY(ansC)) };
 }
 
+// 실제로 시험지에 찍히는 문장. 「모두」선지는 머리의 「모두」를 떼고 보여 준다
+function mockPlainBody(x){ return (x && (x.plainBody || x.body)) || ''; }
+
 function buildBoxQ(a, b, unit, rng, pairTopic){
   const pool = mockPool();
   const A = pool.byName[a], B = pool.byName[b];
@@ -1079,16 +1145,22 @@ function buildBoxQ(a, b, unit, rng, pairTopic){
   const ansOpt = set.idx, opts = set.opts;
   const takeT = { 0:0, 1:0, 2:0, 3:0 };
   const items = [];
+  // 삼중 판정 선지는 사람만 다르고 문장이 같은 것이 있다. 한 보기에 같은 문장이
+  // 두 번 들어가지 않도록 본문으로 한 번 더 거른다
+  const seenBody = {};
   for(let i=0;i<4;i++){
     const isTrue = ansOpt.indexOf(i) >= 0;
     let src;
     if(labels[i] === LB) src = isTrue ? pr.O : pr.X;
     else if(labels[i] === L1) src = isTrue ? AO : AX;
     else src = isTrue ? BO : BX;
-    const used = takeT[labels[i] + (isTrue?'T':'F')] || 0;
-    takeT[labels[i] + (isTrue?'T':'F')] = used + 1;
-    const pick = src[used];
+    const key = labels[i] + (isTrue?'T':'F');
+    let u = takeT[key] || 0;
+    while(src[u] && seenBody[mockPlainBody(src[u])]) u++;
+    takeT[key] = u + 1;
+    const pick = src[u];
     if(!pick) return null;                     // 재료가 모자라면 이 유형은 포기
+    seenBody[mockPlainBody(pick)] = 1;
     items.push(Object.assign({}, pick, { label:labels[i], mark:MOCK_BOX_MARK[i], ok:isTrue }));
   }
   const psA = shuffleSeeded(A.ps, rng)[0];
@@ -1123,7 +1195,7 @@ function buildVennQ(a, b, unit, rng, pairTopic){
   // 「모두」선지는 B영역에 들어갈 때 머리의 「모두」를 뗀다. 중복 검사는 그렇게
   // 떼고 난 뒤, 실제로 시험지에 찍히는 문장으로 해야 한다. 떼기 전 문장으로 비교하면
   // 「갑은 을과 달리 P」와 「갑과 을은 모두 P」가 같은 보기에 나란히 들어간다
-  const bodyOf = (x) => x.plainBody || x.body;
+  const bodyOf = mockPlainBody;
   const take = (list, key) => {                 // 같은 문장이 두 번 나오지 않게
     let i = cnt[key] || 0;
     while(list[i] && seenBody[bodyOf(list[i])]) i++;
@@ -1232,6 +1304,152 @@ function buildAlgoQ(a, b, unit, rng, pairTopic){
            psA:psA, psB:psB, items:items, opts:set.opts, ans:set.ans };
 }
 
+/* ---------- 삼중 판정 묶음 ----------
+   같은 문장을 세 사람에게 각각 O/X 로 매긴 자체 제작 선지(set 「삼중-자체」)를
+   조합별로 모은다. 세 판정이 있으면 3중 벤의 일곱 영역도, 여섯 방향의 비판도
+   계산으로 정해진다. X 가 Y 를 비판할 수 있는 것은 X 가 O 이고 Y 가 X 일 때뿐이다. */
+let MOCK_TRIO_CACHE = null;
+function mockTrioSets(){
+  if(MOCK_TRIO_CACHE) return MOCK_TRIO_CACHE;
+  const names = mockNameList();
+  const byBody = {};
+  ((typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS) ? CMP_ITEMS : []).forEach(it=>{
+    if(it.set !== '삼중-자체' || !it.crit) return;
+    const sp = mockSplit(it.text, names);
+    if(!sp) return;
+    const b = byBody[sp.body] || (byBody[sp.body] = { body:sp.body, crit:it.crit, ans:{}, id:{} });
+    b.ans[sp.name] = it.answer;
+    b.id[sp.name] = it.id;
+  });
+  const out = {};
+  Object.keys(byBody).forEach(k=>{
+    const b = byBody[k];
+    const who = Object.keys(b.ans);
+    if(who.length !== 3) return;
+    const key = who.slice().sort().join('|');
+    (out[key] || (out[key] = { who:who.slice().sort(), list:[] })).list.push(b);
+  });
+  MOCK_TRIO_CACHE = out;
+  return out;
+}
+// 셋을 어떤 순서로 놓든 같은 묶음을 찾는다
+function mockTrioOf(a, b, c){
+  return mockTrioSets()[[a,b,c].slice().sort().join('|')] || null;
+}
+// P 에 대해 X 가 Y 에게 비판을 제기할 수 있는가
+function mockCanCritique(p, x, y){ return p.ans[x] === 'O' && p.ans[y] === 'X'; }
+
+/* ---------- 3중 벤다이어그램 ----------
+   일곱 영역 가운데 「셋 모두」는 반드시 넣고 나머지 셋을 골라 A~D 로 이름 붙인다.
+   보기 네 개 중 둘은 제 영역에 맞는 문장, 둘은 다른 영역 문장을 옮겨 붙인 것이다. */
+const MOCK_TRIO_ZONES = [
+  { k:'OOO', lab:(w)=>'갑과 을과 병의 공통 입장' },
+  { k:'OXX', lab:(w)=>'갑만의 입장' },
+  { k:'XOX', lab:(w)=>'을만의 입장' },
+  { k:'XXO', lab:(w)=>'병만의 입장' },
+  { k:'OOX', lab:(w)=>'갑과 을만의 공통 입장' },
+  { k:'XOO', lab:(w)=>'을과 병만의 공통 입장' },
+  { k:'OXO', lab:(w)=>'갑과 병만의 공통 입장' },
+];
+function mockTrioPat(p, a, b, c){ return p.ans[a] + p.ans[b] + p.ans[c]; }
+
+function buildTrioVennQ(a, b, c, unit, rng, pairTopic){
+  const set = mockTrioOf(a, b, c);
+  if(!set) return null;
+  const pool = mockPool();
+  const byPat = {};
+  set.list.forEach(p=>{
+    const k = mockTrioPat(p, a, b, c);
+    if(!MOCK_TRIO_ZONES.some(z=> z.k === k)) return;   // XXX 는 벤에 자리가 없다
+    (byPat[k] || (byPat[k] = [])).push(p);
+  });
+  if(!byPat['OOO']) return null;
+  const others = MOCK_TRIO_ZONES.filter(z=> z.k !== 'OOO' && byPat[z.k]);
+  if(others.length < 3) return null;
+
+  const three = shuffleSeeded(others, rng).slice(0, 3);
+  // A · B · C 는 고른 셋, D 는 언제나 가운데
+  const zones = three.concat([MOCK_TRIO_ZONES[0]]);
+  const letters = ['A','B','C','D'];
+  const opt = mockOptSet(rng);
+  const used = {};
+  const items = [];
+  for(let i=0;i<4;i++){
+    const isTrue = opt.idx.indexOf(i) >= 0;
+    const z = zones[i];
+    let src;
+    if(isTrue){
+      src = shuffleSeeded(byPat[z.k], rng);
+    } else {
+      // 다른 영역의 문장을 이 자리에 옮겨 붙이면 틀린 배정이 된다
+      const wrong = zones.filter(x=> x.k !== z.k).map(x=> byPat[x.k]).filter(Boolean);
+      src = shuffleSeeded([].concat.apply([], wrong), rng);
+    }
+    const pick = src.filter(p=> !used[p.body])[0];
+    if(!pick) return null;
+    used[pick.body] = 1;
+    const real = MOCK_TRIO_ZONES.filter(x=> x.k === mockTrioPat(pick, a, b, c))[0];
+    const say = (w)=> [a,b,c].map((n,ix)=> n + ' ' + pick.ans[n]).join(' · ');
+    items.push({ id:pick.id[a] || pick.id[b] || pick.id[c], body:pick.body,
+                 zone:letters[i], zoneLab:z.lab(), mark:MOCK_BOX_MARK[i], ok:isTrue,
+                 note: (isTrue ? '제자리다. ' : '자리가 틀렸다. ')
+                   + '갑 ' + a + ' ' + pick.ans[a] + ' · 을 ' + b + ' ' + pick.ans[b]
+                   + ' · 병 ' + c + ' ' + pick.ans[c] + ' 이므로 '
+                   + (real ? real.lab() : '어느 영역에도 들어가지 않는다') + '.',
+                 src:'자체 제작' });
+  }
+  const ps = [a,b,c].map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
+  return { type:'trioVenn', who:[a,b,c], unit:unit, pairTopic:pairTopic||null,
+           psList:ps, zones:zones.map((z,i)=>({ letter:letters[i], lab:z.lab() })),
+           items:items, opts:opt.opts, ans:opt.ans };
+}
+
+/* ---------- 서로에게 제기할 수 있는 비판 ----------
+   화살표 여섯 개 — A 갑→을 · B 을→갑 · C 을→병 · D 병→을 · E 병→갑 · F 갑→병.
+   다섯 선지 가운데 하나만 실제로 성립하는 비판이다. */
+const MOCK_CRIT_ARROWS = [
+  { k:'A', from:0, to:1 }, { k:'B', from:1, to:0 },
+  { k:'C', from:1, to:2 }, { k:'D', from:2, to:1 },
+  { k:'E', from:2, to:0 }, { k:'F', from:0, to:2 },
+];
+function buildCritiqueQ(a, b, c, unit, rng, pairTopic){
+  const set = mockTrioOf(a, b, c);
+  if(!set) return null;
+  const pool = mockPool();
+  const who = [a, b, c];
+  const ok = [], bad = [];
+  MOCK_CRIT_ARROWS.forEach(ar=>{
+    set.list.forEach(p=>{
+      const f = who[ar.from], t = who[ar.to];
+      const rec = { arrow:ar.k, from:f, to:t, crit:p.crit, body:p.body, id:p.id[f],
+        note: (mockCanCritique(p, f, t)
+          ? f + ' 는 이 문장을 O 로, ' + t + ' 는 X 로 받는다. 그래서 ' + f + ' 가 ' + t
+            + ' 에게 제기할 수 있는 비판이 된다.'
+          : f + ' ' + p.ans[f] + ' · ' + t + ' ' + p.ans[t] + ' 다. 비판이 성립하려면 앞사람이 O, '
+            + '뒷사람이 X 여야 하는데 그렇지 않으므로 이 화살표에 올 수 없다.') };
+      (mockCanCritique(p, who[ar.from], who[ar.to]) ? ok : bad).push(rec);
+    });
+  });
+  if(!ok.length || bad.length < 4) return null;
+
+  const ans = shuffleSeeded(ok, rng)[0];
+  // 미끼는 정답과 화살표도 문장도 겹치지 않게 고른다
+  const pick = [];
+  const seenA = { [ans.arrow]:1 }, seenB = { [ans.crit]:1 };
+  shuffleSeeded(bad, rng).forEach(r=>{
+    if(pick.length >= 4 || seenA[r.arrow] || seenB[r.crit]) return;
+    seenA[r.arrow] = 1; seenB[r.crit] = 1; pick.push(r);
+  });
+  if(pick.length < 4) return null;
+
+  const choices = shuffleSeeded(pick.concat([ans]), rng)
+    .sort((x,y)=> x.arrow.charCodeAt(0) - y.arrow.charCodeAt(0));
+  const ps = who.map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
+  return { type:'critique', who:who, unit:unit, pairTopic:pairTopic||null, psList:ps,
+           choices:choices.map(x=> Object.assign({}, x, { src:'자체 제작' })),
+           ans:choices.indexOf(ans) };
+}
+
 /* ---------- 갑·을·병 세 명 비교 ---------- */
 function buildTrioQ(a, b, c, unit, rng, pairTopic){
   const pool = mockPool();
@@ -1241,12 +1459,25 @@ function buildTrioQ(a, b, c, unit, rng, pairTopic){
   const ansItem = Object.assign({}, shuffleSeeded(boxes[ansIdx].O, rng)[0],
                                 { label:L[ansIdx], who:who[ansIdx] });
   const XS = boxes.map(b=>shuffleSeeded(b.X, rng));   // 한 번만 섞어 두고 재사용해야 같은 문장이 두 번 안 나온다
+  // 삼중 판정 선지는 사람만 다르고 문장이 같은 것이 있다. 본문으로 한 번 더 거른다
+  const seenBody = { [mockPlainBody(ansItem)]:1 };
+  const take = (i)=>{
+    const list = XS[i];
+    for(let k=0;k<list.length;k++){
+      if(seenBody[mockPlainBody(list[k])]) continue;
+      seenBody[mockPlainBody(list[k])] = 1;
+      return list[k];
+    }
+    return null;
+  };
   const dist = [];
   for(let i=0;i<3;i++){
-    dist.push(Object.assign({}, XS[i][0], { label:L[i], who:who[i] }));
+    const it = take(i);
+    if(!it) return null;
+    dist.push(Object.assign({}, it, { label:L[i], who:who[i] }));
   }
   const j = (ansIdx + 1) % 3;
-  const extra = XS[j][1];
+  const extra = take(j);
   if(!extra) return null;
   dist.push(Object.assign({}, extra, { label:L[j], who:who[j] }));
   const ps = who.map(n=>shuffleSeeded(pool.byName[n].ps, rng)[0]);
@@ -1511,7 +1742,7 @@ function toggleMockGuess(i){
      찍은 문항      → 그 문항의 선지(보기) 전부 — 맞혔어도
      고르지 않은 문항 → 찍은 것과 같이 본다
 */
-const MOCK_BOX_TYPES = { box:1, venn:1, algo:1 };
+const MOCK_BOX_TYPES = { box:1, venn:1, algo:1, trioVenn:1 };
 function mockStarIds(set, run){
   const ids = [];
   const add = id => { if(id && ids.indexOf(id) < 0) ids.push(id); };

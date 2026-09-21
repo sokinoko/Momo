@@ -166,6 +166,11 @@ def add(batch, dry=False):
         assert '\n' not in rec['note'], '해설에 줄바꿈: ' + rid
         assert not set(rec['note']) & set(CURLY), '해설에 굽은 따옴표: ' + rid
         assert len(rec['note']) >= NOTE_MIN, '해설이 너무 짧다(%d자): %s' % (len(rec['note']), rid)
+        # 비판 문구. 삼중 세트에만 단다. 「X 는 Y 에게 P 를 간과한다」의 P 자리에 들어간다
+        if rec.get('crit'):
+            c = rec['crit']
+            assert '\n' not in c and not set(c) & set(CURLY), '비판 문구가 잘못됐다: ' + rid
+            assert c.endswith('간과한다.'), '비판 문구는 「~간과한다.」로 끝낸다: ' + rid
 
         p = parse(t, ns)
         assert p, '비교 형식으로 파싱되지 않는다: ' + rid
