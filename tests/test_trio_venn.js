@@ -29,25 +29,78 @@ function split(text){
 }
 
 let fail = 0;
+// 출제기(mockTrioSets)와 같은 방식으로 판정을 모은다.
+//   단독 「A는 P」 · 「A와 B는 모두 P」 O · 「A는 B와 달리 P」 O
+const OX = JSON.parse(fs.readFileSync(APP + '/ox_items.json', 'utf8'));
 const byBody = new Map();
-for(const r of CMP){
-  if(r.set !== '삼중-자체') continue;
-  const s = split(r.text);
-  if(!s){ console.log('  ✕ 파싱 실패 ' + r.id); fail++; continue; }
-  if(!byBody.has(s.body)) byBody.set(s.body, new Map());
-  byBody.get(s.body).set(s.name, r.answer);
+const put = (body, name, ans)=>{
+  if(!byBody.has(body)) byBody.set(body, new Map());
+  const m = byBody.get(body);
+  if(m.has(name) && m.get(name) !== ans) m.set('__bad', 1);
+  m.set(name, ans);
+};
+function splitPair(text){
+  for(const a of names){
+    if(text.indexOf(a) !== 0) continue;
+    let rest = text.slice(a.length);
+    if('와과'.indexOf(rest[0]) < 0) return null;
+    rest = rest.slice(1).replace(/^\s+/, '');
+    for(const b of names){
+      if(b === a || rest.indexOf(b) !== 0) continue;
+      let r2 = rest.slice(b.length);
+      const m = r2.match(/^(은|는)\s*/); if(!m) return null;
+      r2 = r2.slice(m[0].length);
+      if(r2.length < 8) return null;
+      for(const k of names) if(k !== a && k !== b && r2.indexOf(k) >= 0) return null;
+      return { a, b, body:r2.replace(/^모두\s*/, '') };
+    }
+    return null;
+  }
+  return null;
+}
+function splitDiff(text){
+  for(const a of names){
+    if(text.indexOf(a) !== 0) continue;
+    let rest = text.slice(a.length);
+    const m = rest.match(/^(은|는)\s*/); if(!m) return null;
+    rest = rest.slice(m[0].length);
+    for(const b of names){
+      if(b === a || rest.indexOf(b) !== 0) continue;
+      const m2 = rest.slice(b.length).match(/^(와|과)\s*달리\s*/); if(!m2) return null;
+      const body = rest.slice(b.length + m2[0].length);
+      if(body.length < 8) return null;
+      for(const k of names) if(k !== a && k !== b && body.indexOf(k) >= 0) return null;
+      return { a, b, body };
+    }
+    return null;
+  }
+  return null;
+}
+for(const r of OX.concat(CMP)){
+  const pr = splitPair(r.text);
+  if(pr){ if(r.answer === 'O'){ put(pr.body, pr.a, 'O'); put(pr.body, pr.b, 'O'); } continue; }
+  const df = splitDiff(r.text);
+  if(df){ if(r.answer === 'O'){ put(df.body, df.a, 'O'); put(df.body, df.b, 'X'); } continue; }
+  const sp = split(r.text);
+  if(sp) put(sp.body, sp.name, r.answer);
+  else if(r.set === '삼중-자체'){ console.log('  ✕ 파싱 실패 ' + r.id); fail++; }
 }
 
 const groups = new Map();
 for(const [body, m] of byBody){
-  if(m.size !== 3){ console.log('  ✕ 세 판정이 안 갖춰짐 — ' + body.slice(0,44)); fail++; continue; }
-  const key = [...m.keys()].sort().join(' · ');
-  if(!groups.has(key)) groups.set(key, []);
-  groups.get(key).push({ body, ans:Object.fromEntries(m) });
+  if(m.has('__bad')) continue;
+  const who = [...m.keys()];
+  if(who.length < 3) continue;
+  for(let i=0;i<who.length-2;i++) for(let j=i+1;j<who.length-1;j++) for(let k=j+1;k<who.length;k++){
+    const t = [who[i], who[j], who[k]].sort();
+    const key = t.join(' · ');
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ body, ans:Object.fromEntries(m) });
+  }
 }
 
 const C3 = n => n < 3 ? 0 : n*(n-1)*(n-2)/6;
-console.log('삼중 명제 ' + byBody.size + '개 · 조합 ' + groups.size + '개\n');
+console.log('판정이 모인 문장 ' + byBody.size + '개 · 세 사람 이상 모인 조합 ' + groups.size + '개\n');
 let usable = 0, shapes = 0;
 for(const [key, list] of groups){
   const who = key.split(' · ');
@@ -67,8 +120,10 @@ for(const [key, list] of groups){
   const others = [...got.keys()].filter(p => p !== 'OOO').length;
   const n = hasAll ? C3(others) : 0;
   if(hasAll && others >= 3){ usable++; shapes += n; }
-  console.log((hasAll && others >= 3 ? '  ✓ ' : '  · ') + key
+  const good = hasAll && others >= 3;
+  console.log((good ? '  ✓ ' : '  · ') + key
     + '  ' + list.length + '명제 · 영역 ' + got.size + '/7 · 문항 모양 ' + n + '가지');
+  if(!good) continue;
   const order = ['OOO','OXX','XOX','XXO','OOX','XOO','OXO'];
   for(const p of order){
     if(got.has(p)) console.log('      ' + (p==='OOO'?'★':' ') + ' ' + label[p].padEnd(14) + got.get(p)[0].slice(0,44));
