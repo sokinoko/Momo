@@ -14,7 +14,9 @@
            'basis':['ox-1-1','ox-2-3'] }], dry=True)
 
 검사하는 것
-  · 형식이 「A와 B는 모두 ~」 또는 「A는 B와 달리 ~」로 파싱되는지 (출제기 파서와 동일)
+  · 형식이 「A와 B는 모두 ~」 「A는 B와 달리 ~」 「A는 ~」로 파싱되는지 (출제기 파서와 동일)
+  · 단독 선지는 topics 가 한 개, 비교 선지는 두 개
+  · fix(이렇게 고치면 맞는 선지)는 X선지에만
   · 「~와 달리」는 O선지만 (출제기가 diffs에 O만 담는다)
   · 이름이 실제 제시문 사상가인지, topics 가 실제 주제인지
   · note(해설)가 반드시 있고 충분히 긴지 — 자체 제작이라 해설 없는 선지는 금지
@@ -111,8 +113,32 @@ def split_diff(text, ns):
     return None
 
 
+def split_solo(text, ns):
+    """「A는 ~라고 본다」 — app.js mockSplit 과 같은 규칙"""
+    for n in ns:
+        if not text.startswith(n):
+            continue
+        rest = text[len(n):]
+        m = re.match(r'^(은|는)\s*', rest)
+        if m:
+            rest = rest[m.end():]
+        elif rest.startswith('에 따르면'):
+            rest = rest[5:].lstrip()
+        elif rest.startswith('의 입장에서'):
+            rest = rest[6:].lstrip()
+        else:
+            return None
+        if len(rest) < 8:
+            return None
+        for k in ns:
+            if k != n and k in rest:
+                return None
+        return ('solo', n, None, rest)
+    return None
+
+
 def parse(text, ns):
-    return split_pair(text, ns) or split_diff(text, ns)
+    return split_pair(text, ns) or split_diff(text, ns) or split_solo(text, ns)
 
 
 def add(batch, dry=False):
@@ -147,17 +173,25 @@ def add(batch, dry=False):
         if kind == 'diff':
             assert rec['answer'] == 'O', '「~와 달리」는 O선지만: ' + rid
 
-        assert len(rec['topics']) == 2, 'topics 는 두 사상가: ' + rid
+        want = 1 if kind == 'solo' else 2
+        assert len(rec['topics']) == want, \
+            'topics 개수가 맞지 않는다(%s 는 %d개): %s' % (kind, want, rid)
         for tp in rec['topics']:
             assert tp in ok_topics, '없는 주제 id: %s (%s)' % (tp, rid)
+        # fix(이렇게 고치면 맞는 선지)는 X선지에만 단다
+        if rec.get('fix'):
+            assert rec['answer'] == 'X', 'fix 는 X선지에만: ' + rid
+            assert '\n' not in rec['fix'] and not set(rec['fix']) & set(CURLY), \
+                'fix 에 줄바꿈이나 굽은 따옴표: ' + rid
 
         # 근거는 반드시 이 쌍의 두 사상가 가운데 한쪽을 다루는 기출이어야 한다.
         # id 가 있기만 하면 통과시키면 엉뚱한 사상가의 선지를 근거로 달아도 걸리지 않는다.
         for bid in rec['basis']:
             assert bid in ox_ids, '없는 근거 id: %s (%s)' % (bid, rid)
             bt = ox_by_id[bid]['text']
-            assert (a in bt) or (b in bt), \
-                '근거가 이 쌍과 무관하다: %s ← %s (%s)' % (rid, bid, bt[:40])
+            who = [x for x in (a, b) if x]
+            assert any(x in bt for x in who), \
+                '근거가 이 사상가와 무관하다: %s ← %s (%s)' % (rid, bid, bt[:40])
 
         assert rid not in ids, '이미 있는 id: ' + rid
         if t in have:
@@ -174,8 +208,8 @@ def add(batch, dry=False):
         if src:
             assert src in ps_by_id, '없는 제시문 id: %s (%s)' % (src, rid)
             sp = ps_by_id[src]
-            assert sp['name'] in (a, b), \
-                '제시문이 이 쌍과 무관하다: %s ← %s (%s)' % (rid, src, sp['name'])
+            assert sp['name'] in [x for x in (a, b) if x], \
+                '제시문이 이 사상가와 무관하다: %s ← %s (%s)' % (rid, src, sp['name'])
             assert quote in sp['text'], \
                 '인용이 제시문 본문에 그대로 있지 않다: %s ← %s' % (rid, src)
 
@@ -183,7 +217,7 @@ def add(batch, dry=False):
         rec.setdefault('source', '자체 제작')
         rec.setdefault('set', '비교-원전' if src else '비교-자체')
         rec['kind'] = kind
-        rec['pair'] = [a, b]
+        rec['pair'] = [a] if kind == 'solo' else [a, b]
         ids.add(rid); have.add(t)
         added.append(rec)
 

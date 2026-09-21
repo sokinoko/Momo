@@ -1120,9 +1120,13 @@ function buildVennQ(a, b, unit, rng, pairTopic){
   const cnt = {};
   const items = [];
   const seenBody = {};
+  // 「모두」선지는 B영역에 들어갈 때 머리의 「모두」를 뗀다. 중복 검사는 그렇게
+  // 떼고 난 뒤, 실제로 시험지에 찍히는 문장으로 해야 한다. 떼기 전 문장으로 비교하면
+  // 「갑은 을과 달리 P」와 「갑과 을은 모두 P」가 같은 보기에 나란히 들어간다
+  const bodyOf = (x) => x.plainBody || x.body;
   const take = (list, key) => {                 // 같은 문장이 두 번 나오지 않게
     let i = cnt[key] || 0;
-    while(list[i] && seenBody[list[i].body]) i++;
+    while(list[i] && seenBody[bodyOf(list[i])]) i++;
     cnt[key] = i + 1;
     return list[i] || null;
   };
@@ -1138,7 +1142,7 @@ function buildVennQ(a, b, unit, rng, pairTopic){
       if(!pick && !isTrue){                                  // 「모두」 X선지가 없으면
         pick = take(shuffleSeeded(A.X, rng), 'AX');          // 갑이 부정하는 문장 → 공통일 수 없다
       }
-      if(pick) pick = Object.assign({}, pick, { body: pick.plainBody || pick.body });
+      if(pick) pick = Object.assign({}, pick, { body: bodyOf(pick) });
     }
     if(!pick) return null;
     seenBody[pick.body] = 1;
