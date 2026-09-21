@@ -21,6 +21,16 @@
   · basis(근거 기출 id)가 1개 이상이고 모두 실재하는지
   · 기존 기출 선지와 본문이 겹치면서 답이 반대인 것이 없는지
   · 줄바꿈 · 굽은 따옴표 · id 중복
+
+출제 예상 선지(기출에 아직 안 나온 원전 대목으로 만든 것)는 여기에 두 가지를 더 단다.
+
+    'psid':  'ps-kant-20',            # 근거가 된 제시문 id
+    'quote': '지성, 기지, 판단력',      # 그 제시문 본문에 그대로 있는 구절
+
+  · psid 는 실재해야 하고, 그 제시문의 사상가가 이 쌍의 한쪽이어야 한다
+  · quote 는 제시문 본문에 글자 그대로 들어 있어야 한다 (ps_add 의 clues 규칙과 같다)
+  · 둘은 함께 온다. 하나만 오면 거부한다. psid 가 달린 것은 set 이 「비교-원전」이 된다
+  · 이름을 psid 로 둔 것은 출제기가 쓰는 src(출처 문자열)와 겹치지 않게 하기 위해서다
 """
 import json, os, re, shutil, datetime
 
@@ -109,6 +119,7 @@ def add(batch, dry=False):
     cur = json.load(open(PATH, encoding='utf-8')) if os.path.exists(PATH) else []
     ox = json.load(open(OX, encoding='utf-8'))
     ns = names()
+    ps_by_id = {p['id']: p for p in json.load(open(PASS, encoding='utf-8'))}
     ok_topics = known_topics()
     ox_ids = {i['id'] for i in ox}
     ox_by_text = {i['text']: i for i in ox}
@@ -156,20 +167,33 @@ def add(batch, dry=False):
         assert not (old and old['answer'] != rec['answer']), \
             '기출과 본문은 같은데 답이 반대다: %s (%s)' % (rid, old['id'] if old else '')
 
+        # 원전 근거. 제시문 id 가 실재하고, 그 제시문이 이 쌍의 사상가 것이고,
+        # 인용 구절이 제시문 본문에 글자 그대로 있어야 한다.
+        src, quote = rec.get('psid'), rec.get('quote')
+        assert bool(src) == bool(quote), 'psid 와 quote 는 함께 온다: ' + rid
+        if src:
+            assert src in ps_by_id, '없는 제시문 id: %s (%s)' % (src, rid)
+            sp = ps_by_id[src]
+            assert sp['name'] in (a, b), \
+                '제시문이 이 쌍과 무관하다: %s ← %s (%s)' % (rid, src, sp['name'])
+            assert quote in sp['text'], \
+                '인용이 제시문 본문에 그대로 있지 않다: %s ← %s' % (rid, src)
+
         rec = dict(rec)
         rec.setdefault('source', '자체 제작')
-        rec.setdefault('set', '비교-자체')
+        rec.setdefault('set', '비교-원전' if src else '비교-자체')
         rec['kind'] = kind
         rec['pair'] = [a, b]
         ids.add(rid); have.add(t)
         added.append(rec)
 
+    src_n = sum(1 for r in added if r.get('psid'))
     o = sum(1 for r in added if r['answer'] == 'O')
     kd = {}
     for r in added:
         kd[r['kind']] = kd.get(r['kind'], 0) + 1
-    print('준비된 비교 선지 %d개 (O %d / X %d) · %s · 중복 %d'
-          % (len(added), o, len(added) - o, kd, len(dup)))
+    print('준비된 비교 선지 %d개 (O %d / X %d) · %s · 원전 근거 %d · 중복 %d'
+          % (len(added), o, len(added) - o, kd, src_n, len(dup)))
     if dry:
         print('[dry] 저장하지 않음')
         return added

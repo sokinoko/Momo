@@ -751,7 +751,9 @@ function mockPool(){
   const byName = {}, pairs = {}, diffs = {};
 
   mockSourceItems().forEach(it=>{
-    const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'' };
+    // psid·quote 는 자체 제작 선지가 근거로 삼은 원전(제시문). 채점 해설에서 보여 준다
+    const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'',
+                   psid:it.psid||'', quote:it.quote||'' };
     const sp = mockSplit(it.text, names);
     if(sp){
       const b = byName[sp.name] || (byName[sp.name] = {O:[], X:[], ps:[], units:{}, topics:{}});

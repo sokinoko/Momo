@@ -47,6 +47,9 @@ for t in tests/test_*.js; do node "$t" | tail -1; done
 - 확인 창(`confirm`)은 쓰지 않는다. 홈 화면 앱에서 막힌다.
 - 같은 날·같은 세트 번호면 같은 문제. 유형별 표본 수가 바뀌면 출제기를 건드린 것이니 이유를 설명한다.
 - `let`/`const` 전역을 테스트에서 쓰려면 `tests/test_mock.js`의 eval 치환 목록에 추가한다.
+- 자체 제작 비교 선지는 `cmp_items.json`(모의고사 전용, 기출 OX 탭에 안 나옴).
+  `src_2027_9/cmp_add.py`로 넣는다. 해설 필수. 원전에서 딴 것은 `psid`(제시문 id)와
+  `quote`(제시문 본문에 그대로 있는 구절)를 달면 채점 해설에 원전이 함께 뜬다.
 
 ## 글꼴
 - 모의고사: 발문·선지 나눔고딕 `--font-exam`, 제시문 나눔명조 `--font-exam-ps`

@@ -983,6 +983,15 @@ function mockQName(q){
 }
 const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'갑·을 대조',
                           box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조' };
+// 자체 제작 선지가 근거로 삼은 원전 한 줄. 기출이 아니라 어디서 왔는지 보이게 한다
+function mockSrcNote(it){
+  if(!it || !it.quote) return '';
+  const ps = (typeof PASSAGES !== 'undefined' && PASSAGES)
+    ? PASSAGES.filter(p=>p.id === it.psid)[0] : null;
+  const who = ps ? ps.name : '';
+  return `<div class="mock-rv-src">원전 — ${escHtml(who)} 「${escHtml(it.quote)}」</div>`;
+}
+
 // 채점 화면에서 선지 문장 자체가 맞는 말인지
 function mockChoiceTruth(q, ci){
   if(q.type === 'wrong') return ci !== q.ans;
@@ -1270,6 +1279,7 @@ function renderMockReview(q, i, run){
           <span class="tx"><b class="mock-lb">${it.zone?it.zone:it.label} :</b> ${escHtml(it.body)}
             <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${mockSrcNote(it)}
             ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
           </span>
         </div>`).join('')}
@@ -1291,6 +1301,7 @@ function renderMockReview(q, i, run){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;
           if(c.note) notes += `<div class="mock-rv-note">${statementTrue?'함께 알아둘 것':'왜 틀렸나'} — ${escHtml(c.note)}</div>`;
           if(!statementTrue && c.fix) notes += `<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(c.fix)}</div>`;
+          notes += mockSrcNote(c);
         }
         return `<div class="mock-rv-row ${isAns?'ans':''} ${isMine && !isAns?'mine':''}">
           <span class="mk">${MOCK_MARK[ci]}</span>
