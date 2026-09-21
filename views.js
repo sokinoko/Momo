@@ -412,7 +412,7 @@ function renderTopicDetail(){
 function renderFigure(f){
   return `<div class="fig-card">
     <div class="fig-name">${f.name}${f.tag?` <span class="fig-tag">${f.tag}</span>`:''}</div>
-    <div class="fig-gist">${renderAnnot(renderStoryLine(f.gist))}</div>
+    <div class="fig-gist">${renderStoryLine(f.gist)}</div>
     ${f.quote?`<div class="fig-quote">${renderStoryLine(f.quote)}${f.qsrc?`<span class="fig-qsrc">— ${f.qsrc}</span>`:''}</div>`:''}
     ${(f.clue&&f.clue.length)?`<div class="fig-clue">제시문에서는 · ${f.clue.map(c=>`「${c}」`).join(' / ')}</div>`:''}
   </div>`;
@@ -421,10 +421,12 @@ function toggleDeep(){ NAV.detailShowDeep = !NAV.detailShowDeep; render(); }
 function toggleStory(){ NAV.detailShowStory = !NAV.detailShowStory; render(); }
 // 스토리 본문의 <r>/<b> 는 필기와 같은 색이되, 굵게만 표시한다
 function renderStoryLine(t){
-  return t
+  // <o>/<s>/<box> 는 필기와 같은 주석 표시. renderAnnot을 함께 태워
+  // 흐름으로 읽기에서도 동그라미·취소선·네모가 그대로 나오게 한다
+  return renderAnnot(t
     .replace(/<r>(.*?)<\/r>/g, '<b class="story-r">$1</b>')
     .replace(/<b>(.*?)<\/b>/g, '<b class="story-b">$1</b>')
-    .replace(/<k>(.*?)<\/k>/g, '<b class="story-k">$1</b>');
+    .replace(/<k>(.*?)<\/k>/g, '<b class="story-k">$1</b>'));
 }
 
 /* ---------- 빈칸학습 설정 ---------- */
