@@ -846,7 +846,7 @@ function nextPs(){
    =================================================================== */
 
 const MOCK_MARK = ['①','②','③','④','⑤'];
-const MOCK_BOXY = { box:1, venn:1, algo:1 };
+const MOCK_BOXY = { box:1, venn:1, algo:1, trioVenn:1 };
 const MOCK_TRIO_LB = ['갑','을','병'];
 
 function mockEraWord(era){
@@ -855,6 +855,16 @@ function mockEraWord(era){
 }
 
 function mockStemText(q){
+  if(q.type === 'trioVenn'){
+    const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
+    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을, 병의 입장을 (나) 그림으로 표현할 때, ' +
+           'A~D에 해당하는 진술로 적절한 것만을 <보기>에서 고른 것은?';
+  }
+  if(q.type === 'critique'){
+    const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
+    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을, 병의 입장에서 서로에게 제기할 수 있는 비판을 ' +
+           '(나) 그림으로 표현할 때, A~F에 해당하는 내용으로 가장 적절한 것은?';
+  }
   if(q.type === 'trio'){
     const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
     return mockEraWord(era) + ' 갑, 을, 병의 입장으로 옳은 것은?';
@@ -887,7 +897,7 @@ function mockStemText(q){
 }
 // 제시문 박스 — 갑·을이면 두 편을 라벨과 함께 보여 준다
 function mockPsBox(q){
-  if(q.type === 'trio'){
+  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique'){
     return `<div class="mock-ps mock-ps-pair">
       ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}</span></div>`).join('')}
     </div>`;
@@ -903,6 +913,8 @@ function mockPsBox(q){
 function mockFigFor(q){
   if(q.type === 'venn') return mockVennFig();
   if(q.type === 'algo') return mockAlgoFig();
+  if(q.type === 'trioVenn') return mockTrioVennFig(q.zones);
+  if(q.type === 'critique') return mockCritiqueFig();
   return '';
 }
 let MOCK_FIG_SEQ = 0;
@@ -930,6 +942,91 @@ function mockVennFig(){
     <text x="344" y="74" font-size="10.5" fill="currentColor">A : 갑만의 입장</text>
     <text x="344" y="96" font-size="10.5" fill="currentColor">B : 갑과 을의 공통 입장</text>
     <text x="344" y="118" font-size="10.5" fill="currentColor">C : 을만의 입장</text>
+  </svg></div>`;
+}
+
+// (나) 3중 벤다이어그램 — 원 셋이 겹친 그림. 가운데는 언제나 D
+function mockTrioVennFig(zones){
+  const id = 'tv' + (++MOCK_FIG_SEQ);
+  // 세 원의 중심. 갑이 위, 을이 왼쪽 아래, 병이 오른쪽 아래
+  const R = 58, cx = [150, 112, 188], cy = [74, 138, 138];
+  // 영역별 글자 자리 — 가운데·단독 셋·둘씩 셋
+  const at = {
+    'A':[160,110], 'B':[160,110], 'C':[160,110], 'D':[160,110],
+  };
+  // 실제 자리는 영역 종류로 정한다
+  const spot = {
+    '갑과 을과 병의 공통 입장':[150,122],
+    '갑만의 입장':[150,48], '을만의 입장':[84,166], '병만의 입장':[216,166],
+    '갑과 을만의 공통 입장':[126,106], '을과 병만의 공통 입장':[150,158],
+    '갑과 병만의 공통 입장':[174,106],
+  };
+  const marks = zones.map(z=>{
+    const s2 = spot[z.lab] || [160,120];
+    return `<text class="vn-lb" x="${s2[0]}" y="${s2[1]}" text-anchor="middle" font-size="14">${z.letter}</text>`;
+  }).join('');
+  const legend = zones.map((z,i)=>
+    `<text x="${296}" y="${64 + i*21}" font-size="10.5" fill="currentColor">${escHtml(z.letter)} : ${escHtml(z.lab)}</text>`
+  ).join('');
+  return `<div class="mock-fig"><svg viewBox="0 0 466 208" width="100%" style="max-width:430px" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="갑 을 병 세 원이 겹친 3중 벤다이어그램">
+    <text x="150" y="12" text-anchor="middle" font-size="11.5" fill="currentColor">갑</text>
+    <text x="46" y="186" text-anchor="middle" font-size="11.5" fill="currentColor">을</text>
+    <text x="254" y="186" text-anchor="middle" font-size="11.5" fill="currentColor">병</text>
+    <circle cx="${cx[0]}" cy="${cy[0]}" r="${R}" fill="none" stroke="currentColor"/>
+    <circle cx="${cx[1]}" cy="${cy[1]}" r="${R}" fill="none" stroke="currentColor"/>
+    <circle cx="${cx[2]}" cy="${cy[2]}" r="${R}" fill="none" stroke="currentColor"/>
+    ${marks}
+    <rect x="284" y="42" width="176" height="${18 + zones.length*21}" fill="none" stroke="currentColor"/>
+    <text x="372" y="38" text-anchor="middle" font-size="10.5" fill="currentColor">〈범례〉</text>
+    ${legend}
+  </svg></div>`;
+}
+
+// (나) 서로에게 제기할 수 있는 비판 — 화살표 여섯 개
+function mockCritiqueFig(){
+  const id = 'cf' + (++MOCK_FIG_SEQ);
+  return `<div class="mock-fig"><svg viewBox="0 0 500 215" width="100%" style="max-width:450px" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="갑 을 병 세 원 사이에 비판의 방향을 나타낸 화살표 여섯 개">
+    <defs><marker id="ah${id}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/></marker></defs>
+    <circle cx="150" cy="46" r="34" fill="none" stroke="currentColor"/>
+    <text x="150" y="51" text-anchor="middle" font-size="12.5" fill="currentColor">갑</text>
+    <circle cx="74" cy="160" r="34" fill="none" stroke="currentColor"/>
+    <text x="74" y="165" text-anchor="middle" font-size="12.5" fill="currentColor">을</text>
+    <circle cx="226" cy="160" r="34" fill="none" stroke="currentColor"/>
+    <text x="226" y="165" text-anchor="middle" font-size="12.5" fill="currentColor">병</text>
+
+    <line x1="126" y1="72" x2="92" y2="128" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="100" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">A</text>
+    <line x1="106" y1="132" x2="140" y2="78" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="134" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">B</text>
+
+    <line x1="196" y1="150" x2="112" y2="150" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="154" y="143" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">C</text>
+    <line x1="104" y1="172" x2="188" y2="172" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="154" y="190" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">D</text>
+
+    <line x1="208" y1="132" x2="172" y2="76" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="204" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">E</text>
+    <line x1="174" y1="72" x2="210" y2="128" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="170" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">F</text>
+
+    <rect x="306" y="18" width="182" height="56" fill="none" stroke="currentColor"/>
+    <text x="397" y="14" text-anchor="middle" font-size="10.5" fill="currentColor">〈범례〉</text>
+    <line x1="318" y1="40" x2="352" y2="40" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="360" y="44" font-size="10.5" fill="currentColor">: 비판의 방향</text>
+    <text x="318" y="66" font-size="10.5" fill="currentColor">A~F : 비판의 내용</text>
+    <rect x="306" y="96" width="182" height="72" fill="none" stroke="currentColor"/>
+    <text x="397" y="92" text-anchor="middle" font-size="10.5" fill="currentColor">〈예 시〉</text>
+    <circle cx="336" cy="120" r="13" fill="none" stroke="currentColor"/>
+    <text x="336" y="124" text-anchor="middle" font-size="10.5" fill="currentColor">갑</text>
+    <line x1="352" y1="120" x2="392" y2="120" stroke="currentColor" marker-end="url(#ah${id})"/>
+    <text x="372" y="113" text-anchor="middle" font-size="10.5" font-weight="700" fill="currentColor">A</text>
+    <circle cx="408" cy="120" r="13" fill="none" stroke="currentColor"/>
+    <text x="408" y="124" text-anchor="middle" font-size="10.5" fill="currentColor">을</text>
+    <text x="316" y="148" font-size="10" fill="currentColor">A는 갑이 을에게 제기할</text>
+    <text x="316" y="162" font-size="10" fill="currentColor">수 있는 비판임.</text>
   </svg></div>`;
 }
 
@@ -974,15 +1071,17 @@ function mockOptLabel(q, oi){
   return q.opts[oi].map(i=>q.items[i].mark).join(', ');
 }
 function mockChoiceHtml(c){
+  if(c.arrow) return `<b class="mock-lb">${c.arrow} :</b> ` + escHtml(c.crit);
   return (c.label ? `<b class="mock-lb">${c.label} :</b> ` : '') + escHtml(c.body);
 }
 function mockQName(q){
-  if(q.type === 'trio') return q.who.join(' · ');
+  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique') return q.who.join(' · ');
   if(q.type === 'pair' || q.type === 'box' || q.type === 'venn' || q.type === 'algo') return q.a + ' · ' + q.b;
   return q.name;
 }
 const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'갑·을 대조',
-                          box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조' };
+                          box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조',
+                          trioVenn:'3중 벤다이어그램', critique:'서로에 대한 비판' };
 // 기출이 아니라 우리가 만든 선지라는 표시. 채점 해설에서 늘 보인다
 function mockMineTag(it){
   return (it && it.src === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
