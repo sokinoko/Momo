@@ -17,6 +17,8 @@ const APP = path.join(__dirname, '..');
 global.DATA = JSON.parse(fs.readFileSync(path.join(__dirname,'..','topics_all.json'),'utf8'));
 global.PASSAGES = JSON.parse(fs.readFileSync(path.join(APP,'passages.json'),'utf8'));
 global.OX_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'ox_items.json'),'utf8'));
+// 자체 제작 비교 선지(모의고사 전용). 출제기가 이것도 읽으므로 테스트에서도 함께 건다
+global.CMP_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'cmp_items.json'),'utf8'));
 global.STATE = { quiz:{ setNo:0, run:null }, streak:{} };
 
 let TODAY = '2026-09-11';
@@ -41,7 +43,8 @@ let fail = 0;
 function ok(cond, msg){ if(!cond){ console.error('  ✕ ' + msg); fail++; } }
 
 const oxById = {};
-OX_ITEMS.forEach(o=>{ oxById[o.id] = o; });
+// 출제기가 읽는 것과 같은 범위(기출 + 자체 제작 비교 선지)로 인덱스를 만든다
+OX_ITEMS.concat(CMP_ITEMS).forEach(o=>{ oxById[o.id] = o; });
 
 const pool = mockPool();
 ok(pool.usable.length >= MOCK_N, '출제 가능 사상가 ' + pool.usable.length + '명 (최소 ' + MOCK_N + ')');

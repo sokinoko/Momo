@@ -738,13 +738,22 @@ function mockSplitDiff(text, names){
   return null;
 }
 
+// 모의고사가 읽는 선지 = 기출 + 자체 제작 비교 선지.
+// 자체 제작분은 기출 OX 탭(oxPool)에는 들어가지 않는다.
+function mockSourceItems(){
+  const cmp = (typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS) ? CMP_ITEMS : [];
+  return OX_ITEMS.concat(cmp);
+}
+
 function mockPool(){
   if(MOCK_CACHE) return MOCK_CACHE;
   const names = mockNameList();
   const byName = {}, pairs = {}, diffs = {};
 
-  OX_ITEMS.forEach(it=>{
-    const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'' };
+  mockSourceItems().forEach(it=>{
+    // psid·quote 는 자체 제작 선지가 근거로 삼은 원전(제시문). 채점 해설에서 보여 준다
+    const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'',
+                   psid:it.psid||'', quote:it.quote||'' };
     const sp = mockSplit(it.text, names);
     if(sp){
       const b = byName[sp.name] || (byName[sp.name] = {O:[], X:[], ps:[], units:{}, topics:{}});
@@ -1111,9 +1120,13 @@ function buildVennQ(a, b, unit, rng, pairTopic){
   const cnt = {};
   const items = [];
   const seenBody = {};
+  // 「모두」선지는 B영역에 들어갈 때 머리의 「모두」를 뗀다. 중복 검사는 그렇게
+  // 떼고 난 뒤, 실제로 시험지에 찍히는 문장으로 해야 한다. 떼기 전 문장으로 비교하면
+  // 「갑은 을과 달리 P」와 「갑과 을은 모두 P」가 같은 보기에 나란히 들어간다
+  const bodyOf = (x) => x.plainBody || x.body;
   const take = (list, key) => {                 // 같은 문장이 두 번 나오지 않게
     let i = cnt[key] || 0;
-    while(list[i] && seenBody[list[i].body]) i++;
+    while(list[i] && seenBody[bodyOf(list[i])]) i++;
     cnt[key] = i + 1;
     return list[i] || null;
   };
@@ -1129,7 +1142,7 @@ function buildVennQ(a, b, unit, rng, pairTopic){
       if(!pick && !isTrue){                                  // 「모두」 X선지가 없으면
         pick = take(shuffleSeeded(A.X, rng), 'AX');          // 갑이 부정하는 문장 → 공통일 수 없다
       }
-      if(pick) pick = Object.assign({}, pick, { body: pick.plainBody || pick.body });
+      if(pick) pick = Object.assign({}, pick, { body: bodyOf(pick) });
     }
     if(!pick) return null;
     seenBody[pick.body] = 1;
@@ -1156,11 +1169,13 @@ function buildVennQ(a, b, unit, rng, pairTopic){
 const MOCK_Q_RULES = [
   ['고 본다.', '고 보는가?'], ['라고 본다.', '라고 보는가?'], ['로 본다.', '로 보는가?'],
   ['고 보았다.', '고 보았는가?'], ['라고 보았다.', '라고 보았는가?'],
-  ['것이다.', '것인가?'], ['아니다.', '아닌가?'], ['않는다.', '않는가?'],
+  ['것이다.', '것인가?'], ['않는다.', '않는가?'],
   ['있다.', '있는가?'], ['없다.', '없는가?'], ['한다.', '하는가?'], ['하였다.', '하였는가?'],
   ['된다.', '되는가?'], ['이다.', '인가?']
 ];
 // 평서문을 질문형으로. 규칙에 안 맞으면 그 문장은 쓰지 않는다.
+// 「~아니다.」는 넣지 않는다. 「~아닌가?」가 되면 순서도에서 예/아니요를 고를 때
+// 부정이 겹쳐 읽기 어렵다. 그런 문장은 순서도 재료에서 그냥 빠진다.
 function mockToQuestion(body){
   const t = body.trim();
   for(let i=0;i<MOCK_Q_RULES.length;i++){

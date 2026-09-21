@@ -27,6 +27,8 @@ DATA_FILES = [
     ('DATA', 'topics_all.json'),
     ('OX_ITEMS', 'ox_items.json'),
     ('PASSAGES', 'passages.json'),
+    # 자체 제작 비교 선지. 기출이 아니므로 모의고사 출제기만 읽는다(기출 OX 탭에는 안 나온다)
+    ('CMP_ITEMS', 'cmp_items.json'),
 ]
 ICONS = {
     '192': 'icons/icon-192x192.png',
