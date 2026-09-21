@@ -983,6 +983,10 @@ function mockQName(q){
 }
 const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'갑·을 대조',
                           box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조' };
+// 기출이 아니라 우리가 만든 선지라는 표시. 채점 해설에서 늘 보인다
+function mockMineTag(it){
+  return (it && it.src === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
+}
 // 자체 제작 선지가 근거로 삼은 원전 한 줄. 기출이 아니라 어디서 왔는지 보이게 한다
 function mockSrcNote(it){
   if(!it || !it.quote) return '';
@@ -1277,7 +1281,7 @@ function renderMockReview(q, i, run){
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
           <span class="tx"><b class="mock-lb">${it.zone?it.zone:it.label} :</b> ${escHtml(it.body)}
-            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${mockSrcNote(it)}
             ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
@@ -1307,9 +1311,9 @@ function renderMockReview(q, i, run){
           <span class="mk">${MOCK_MARK[ci]}</span>
           <div class="tx">
             ${(isAns || isMine || (slip && ci === pen)) ? `<div class="lb">${[isAns?'정답':'', isMine?'OMR 마킹':'', (slip && ci === pen)?'시험지 표시':''].filter(Boolean).join(' · ')}</div>` : ''}
-            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}</div>
+            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockMineTag(c)}</div>
             ${notes}
-            ${open && c.src ? `<div class="note" style="margin-top:3px;">${escHtml(c.src)}</div>` : ''}
+            ${open && c.src && c.src !== '자체 제작' ? `<div class="note" style="margin-top:3px;">${escHtml(c.src)}</div>` : ''}
           </div>
         </div>`;
       }).join('')}

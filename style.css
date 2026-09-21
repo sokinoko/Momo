@@ -1198,3 +1198,12 @@ mark.ps-clue{
   line-height:1.6; color:var(--ink-faint); border-left:2px solid var(--rule);
   padding-left:8px;
 }
+
+/* 기출이 아니라 우리가 만든 선지. 기출과 섞이지 않게 작은 딱지를 붙인다 */
+.mock-mine{
+  display:inline-block; margin-left:5px; vertical-align:1px;
+  padding:1px 5px; border-radius:3px;
+  border:1px solid var(--rule-strong); background:var(--gold-tint);
+  font-family:var(--font-note); font-size:10.5px; line-height:1.5;
+  color:var(--gold); letter-spacing:-.2px; white-space:nowrap;
+}
