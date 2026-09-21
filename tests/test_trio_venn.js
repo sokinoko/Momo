@@ -1,8 +1,13 @@
 // 3중 벤다이어그램 재료 점검.
-// 평가원 3중 벤은 일곱 영역을 다 쓰지 않는다. 범례가 넷이다.
-//   A 갑만 · B 갑과 을만 · C 을과 병만 · D 갑과 을과 병 모두
-// B 와 C 가 을을 함께 물고 있으므로 을이 허브다. 한 조합으로 문항을 만들려면
-// 갑·을·병을 어떻게 놓든 네 자리가 다 채워지는 배치가 하나는 있어야 한다.
+//
+// 평가원 3중 벤은 일곱 영역을 두고 그 가운데 넷을 골라 A~D 로 이름 붙인다.
+//   갑만 · 을만 · 병만 · 갑을 · 을병 · 갑병 · 모두
+// 가운데(셋 모두)는 반드시 배당된다. 나머지 셋은 여섯 자리에서 고른다.
+// 그러므로 한 조합이 쓸모 있으려면 「모두」가 있어야 하고, 그 밖의 자리가
+// 많을수록 뽑을 수 있는 문항 모양이 늘어난다.
+//
+// 재료는 cmp_items.json 에서 set 이 「삼중-자체」인 단독 선지다.
+// 같은 문장을 세 사람에게 각각 O/X 로 매겨 두면 어느 영역인지 저절로 정해진다.
 const fs = require('fs');
 const APP = __dirname + '/..';
 const PASSAGES = JSON.parse(fs.readFileSync(APP + '/passages.json', 'utf8'));
@@ -23,51 +28,53 @@ function split(text){
   return null;
 }
 
+let fail = 0;
 const byBody = new Map();
 for(const r of CMP){
   if(r.set !== '삼중-자체') continue;
   const s = split(r.text);
-  if(!s){ console.log('✕ 파싱 실패 ' + r.id); process.exitCode = 1; continue; }
+  if(!s){ console.log('  ✕ 파싱 실패 ' + r.id); fail++; continue; }
   if(!byBody.has(s.body)) byBody.set(s.body, new Map());
   byBody.get(s.body).set(s.name, r.answer);
 }
 
-// 세 판정이 다 있는 명제만 쓴다
-const groups = new Map();                       // 조합 -> [{body, ans:{name:'O'|'X'}}]
+const groups = new Map();
 for(const [body, m] of byBody){
-  if(m.size !== 3){ console.log('✕ 세 판정이 안 갖춰짐 — ' + body); process.exitCode = 1; continue; }
+  if(m.size !== 3){ console.log('  ✕ 세 판정이 안 갖춰짐 — ' + body.slice(0,44)); fail++; continue; }
   const key = [...m.keys()].sort().join(' · ');
   if(!groups.has(key)) groups.set(key, []);
   groups.get(key).push({ body, ans:Object.fromEntries(m) });
 }
 
-const perm = (a,b,c) => [[a,b,c],[a,c,b],[b,a,c],[b,c,a],[c,a,b],[c,b,a]];
-let ready = 0;
+const C3 = n => n < 3 ? 0 : n*(n-1)*(n-2)/6;
 console.log('삼중 명제 ' + byBody.size + '개 · 조합 ' + groups.size + '개\n');
+let usable = 0, shapes = 0;
 for(const [key, list] of groups){
   const who = key.split(' · ');
-  let best = null;
-  for(const [g, e, b] of perm(...who)){
-    const need = { A:[ 'O','X','X' ], B:['O','O','X'], C:['X','O','O'], D:['O','O','O'] };
-    const fill = {};
-    for(const zone of ['A','B','C','D']){
-      const w = need[zone];
-      const hit = list.find(x => x.ans[g]===w[0] && x.ans[e]===w[1] && x.ans[b]===w[2]);
-      if(hit) fill[zone] = hit.body;
-    }
-    const n = Object.keys(fill).length;
-    if(!best || n > best.n) best = { n, g, e, b, fill };
-    if(n === 4) break;
+  const [x, y, z] = who;
+  const label = {
+    OXX: x + '만', XOX: y + '만', XXO: z + '만',
+    OOX: x + '+' + y, XOO: y + '+' + z, OXO: x + '+' + z, OOO: '모두',
+  };
+  const got = new Map();
+  for(const it of list){
+    const p = it.ans[x] + it.ans[y] + it.ans[z];
+    if(!label[p]) continue;                       // XXX(셋 다 아님)은 벤에 자리가 없다
+    if(!got.has(p)) got.set(p, []);
+    got.get(p).push(it.body);
   }
-  const ok = best.n === 4;
-  if(ok) ready++;
-  console.log((ok ? '  ✓ ' : '  · ') + key + '  ' + list.length + '명제 · 최선 배치 ' + best.n + '/4');
-  if(ok){
-    console.log('      갑 ' + best.g + ' · 을 ' + best.e + '(허브) · 병 ' + best.b);
-    for(const z of ['A','B','C','D']) console.log('      ' + z + ' ' + best.fill[z].slice(0, 46));
-  } else {
-    const miss = ['A','B','C','D'].filter(z => !best.fill[z]);
-    console.log('      빈 자리 ' + miss.join(' · ') + ' (갑 ' + best.g + ' · 을 ' + best.e + ' · 병 ' + best.b + ' 기준)');
+  const hasAll = got.has('OOO');
+  const others = [...got.keys()].filter(p => p !== 'OOO').length;
+  const n = hasAll ? C3(others) : 0;
+  if(hasAll && others >= 3){ usable++; shapes += n; }
+  console.log((hasAll && others >= 3 ? '  ✓ ' : '  · ') + key
+    + '  ' + list.length + '명제 · 영역 ' + got.size + '/7 · 문항 모양 ' + n + '가지');
+  const order = ['OOO','OXX','XOX','XXO','OOX','XOO','OXO'];
+  for(const p of order){
+    if(got.has(p)) console.log('      ' + (p==='OOO'?'★':' ') + ' ' + label[p].padEnd(14) + got.get(p)[0].slice(0,44));
   }
+  const miss = order.filter(p => !got.has(p)).map(p => label[p]);
+  if(miss.length) console.log('        빈 자리 — ' + miss.join(' · '));
 }
-console.log('\n3중 벤을 바로 그릴 수 있는 조합 ' + ready + ' / ' + groups.size);
+console.log('\n쓸 수 있는 조합 ' + usable + ' / ' + groups.size + ' · 뽑을 수 있는 문항 모양 합계 ' + shapes + '가지');
+if(fail){ console.log('문제 ' + fail + '건'); process.exitCode = 1; }
