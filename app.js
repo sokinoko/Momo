@@ -939,13 +939,18 @@ function buildMockSet(){
 
     // 서로에게 제기할 수 있는 비판 — 삼중 판정이 갖춰진 조합에서만
     if(type === 'critique'){
-      const t = shuffleSeeded(mockTrioReady().filter(w=>
-        w.every(m=> !used[m] && pool.byName[m]) && (w.indexOf(n) >= 0)), rng)[0]
-        || shuffleSeeded(mockTrioReady().filter(w=> w.every(m=> !used[m] && pool.byName[m])), rng)[0];
-      if(t){
-        const q = buildCritiqueQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
-        if(q){ qs.push(q); t.forEach(m=> used[m] = 1); continue; }
+      // 비판 문구가 달린 문장이 있는 조합만 후보다. 하나 실패하면 다음 후보로 넘어간다
+      const free = mockTrioReady().filter(w=>
+        w.every(m=> !used[m] && pool.byName[m]) && mockTrioHasCrit(w));
+      const cands = shuffleSeeded(free.filter(w=> w.indexOf(n) >= 0), rng)
+        .concat(shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
+      let cq = null;
+      for(let i=0;i<cands.length && !cq;i++){
+        const t = cands[i];
+        cq = buildCritiqueQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
+        if(cq) t.forEach(m=> used[m] = 1);
       }
+      if(cq){ qs.push(cq); continue; }
       type = 'pair';
     }
 
@@ -1367,6 +1372,11 @@ function mockTrioOf(a, b, c){
 }
 // P 에 대해 X 가 Y 에게 비판을 제기할 수 있는가
 function mockCanCritique(p, x, y){ return p.ans[x] === 'O' && p.ans[y] === 'X'; }
+// 비판 문항으로 쓸 수 있는 조합인가 — 비판 문구가 달린 문장이 하나라도 있어야 한다
+function mockTrioHasCrit(w){
+  const set = mockTrioOf(w[0], w[1], w[2]);
+  return !!(set && set.list.some(p=> p.crit));
+}
 
 /* ---------- 3중 벤다이어그램 ----------
    일곱 영역 가운데 「셋 모두」는 반드시 넣고 나머지 셋을 골라 A~D 로 이름 붙인다.

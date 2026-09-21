@@ -61,16 +61,34 @@ function trioSet(who){
   if(!TRIO_IDX){
     TRIO_IDX = {};
     const names = mockNameList();
-    CMP_ITEMS.forEach(it=>{
-      if(it.set !== '삼중-자체') return;
+    // app.js 의 mockTrioSets 와 같은 규칙으로 판정을 모은다(단독 · 「모두」O · 「~와 달리」O)
+    const put = (body, name, ans)=>{
+      const m = TRIO_IDX[body] || (TRIO_IDX[body] = {});
+      if(m[name] && m[name] !== ans) m.bad = 1;
+      m[name] = ans;
+    };
+    mockSourceItems().forEach(it=>{
+      const pr = mockSplitPair(it.text, names);
+      if(pr){
+        if(it.answer === 'O'){
+          const body = pr.body.replace(/^모두\s*/, '');
+          put(body, pr.a, 'O'); put(body, pr.b, 'O');
+        }
+        return;
+      }
+      const df = mockSplitDiff(it.text, names);
+      if(df){
+        if(it.answer === 'O'){ put(df.body, df.a, 'O'); put(df.body, df.b, 'X'); }
+        return;
+      }
       const sp = mockSplit(it.text, names);
-      if(!sp) return;
-      (TRIO_IDX[sp.body] || (TRIO_IDX[sp.body] = {}))[sp.name] = it.answer;
+      if(sp) put(sp.body, sp.name, it.answer);
     });
   }
   const out = {};
   Object.keys(TRIO_IDX).forEach(b=>{
     const m = TRIO_IDX[b];
+    if(m.bad) return;
     if(who.every(n=> m[n])) out[b] = m;
   });
   return out;
