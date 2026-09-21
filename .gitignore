@@ -7,3 +7,4 @@ passages.backup-*.json
 ox_items.backup-*.json
 __pycache__/
 .DS_Store
+cmp_items.backup-*.json

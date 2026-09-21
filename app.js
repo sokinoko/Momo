@@ -738,12 +738,19 @@ function mockSplitDiff(text, names){
   return null;
 }
 
+// 모의고사가 읽는 선지 = 기출 + 자체 제작 비교 선지.
+// 자체 제작분은 기출 OX 탭(oxPool)에는 들어가지 않는다.
+function mockSourceItems(){
+  const cmp = (typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS) ? CMP_ITEMS : [];
+  return OX_ITEMS.concat(cmp);
+}
+
 function mockPool(){
   if(MOCK_CACHE) return MOCK_CACHE;
   const names = mockNameList();
   const byName = {}, pairs = {}, diffs = {};
 
-  OX_ITEMS.forEach(it=>{
+  mockSourceItems().forEach(it=>{
     const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'' };
     const sp = mockSplit(it.text, names);
     if(sp){
