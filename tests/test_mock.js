@@ -35,7 +35,7 @@ const start = appSrc.indexOf('const MOCK_N');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -259,6 +259,14 @@ for(let d=1; d<=40; d++){
   const set = buildMockSet();
   const bi = set.findIndex(q=> q.type === 'box' || q.type === 'venn' || q.type === 'algo');
   // 보기형이 늘었으니 5지선다는 choices 를 가진 것으로 고른다
+  // 순서도·벤다이어그램·비판처럼 그림이 들어가는 문항은 붙여 놓지 않는다
+  const figAt = [];
+  set.forEach((q,i)=>{ if(MOCK_SPREAD_TYPES[q.type]) figAt.push(i); });
+  for(let i=1;i<figAt.length;i++){
+    ok(figAt[i] - figAt[i-1] >= 2,
+       TODAY + ' 그림 문항 ' + (figAt[i-1]+1) + '번과 ' + (figAt[i]+1) + '번이 붙어 있다');
+  }
+
   const si = set.findIndex(q=> !!q.choices && q.choices.length === 5);
   ok(bi >= 0 && si >= 0, '별표 테스트용 문항 없음');
   const run = { picks:[], guess:[] };

@@ -891,6 +891,38 @@ function buildMockQuota(pool, rng, used, qs){
   if(venn) qs.push(venn);
 }
 
+/* 순서도·벤다이어그램처럼 그림이 들어가는 문항이 한곳에 몰리면 시험지가 이상해진다.
+   다 만든 뒤에 고르게 흩어 놓는다. 자리만 바꾸는 것이라 뽑히는 문제는 그대로고,
+   rng 를 맨 마지막에 쓰므로 같은 날·같은 세트면 자리도 똑같다. */
+const MOCK_SPREAD_TYPES = { algo:1, venn:1, trioVenn:1, critique:1 };
+function mockSpread(qs, rng){
+  const figRaw = [], rest = [];
+  qs.forEach(q=> (MOCK_SPREAD_TYPES[q.type] ? figRaw : rest).push(q));
+  // 순서도가 늘 앞, 벤이 늘 뒤로 가지 않게 유형 순서도 섞는다
+  const fig = shuffleSeeded(figRaw, rng);
+  const n = qs.length, k = fig.length;
+  if(k < 2 || k * 2 > n) return qs;            // 흩을 여유가 없으면 그대로 둔다
+  const gap = n / k;
+  const pos = [];
+  let last = -2;
+  for(let i=0;i<k;i++){
+    let p = Math.round(gap * i + gap * (0.25 + rng() * 0.5));
+    if(p <= last + 1) p = last + 2;            // 둘이 붙지 않게 한 칸은 띄운다
+    if(p > n - 1) p = n - 1;
+    pos.push(p);
+    last = p;
+  }
+  for(let i=k-1;i>0;i--){                      // 끝에서 밀린 만큼 앞으로 당긴다
+    if(pos[i] - pos[i-1] < 2) pos[i-1] = pos[i] - 2;
+  }
+  if(pos[0] < 0) return qs;
+  const out = new Array(n);
+  pos.forEach((p, i)=> out[p] = fig[i]);
+  let r = 0;
+  for(let i=0;i<n;i++) if(!out[i]) out[i] = rest[r++];
+  return out;
+}
+
 function buildMockSet(){
   const pool = mockPool();
   const rng = mulberry32(seedFromDate(mockSeedStr()));
@@ -1002,7 +1034,7 @@ function buildMockSet(){
     qs.push({ type:type, name:n, ps:ps, choices:choices, ans:choices.indexOf(ansItem) });
     used[n] = 1;
   }
-  return qs;
+  return mockSpread(qs, rng);
 }
 
 
