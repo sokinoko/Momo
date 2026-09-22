@@ -35,7 +35,7 @@ const start = appSrc.indexOf('const MOCK_N');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -95,6 +95,7 @@ function trioSet(who){
 }
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
 let trioVennQ = 0, critQ = 0;
+const algoHist = {}, vennHist = {};
 for(let d=1; d<=40; d++){
   TODAY = '2026-' + String((d % 12) + 1).padStart(2,'0') + '-' + String((d % 28) + 1).padStart(2,'0');
   const set = buildMockSet();
@@ -107,11 +108,16 @@ for(let d=1; d<=40; d++){
     else names.push(q.name);
   });
   ok(new Set(names).size === names.length, TODAY + ' 사상가 중복 (' + names.length + '명 중 ' + new Set(names).size + '명)');
-  // 시험지 구성 — 순서도 두 문항 이상, 벤다이어그램(2중이든 3중이든) 한 문항 이상
+  // 시험지 구성 — 순서도·벤다이어그램(2중이든 3중이든)은 세트마다 개수가 다르다
   const nAlgo = set.filter(q=> q.type === 'algo').length;
   const nVenn = set.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length;
-  ok(nAlgo >= 2, TODAY + ' 순서도가 ' + nAlgo + '문항 (두 문항 이상이어야 한다)');
-  ok(nVenn >= 1, TODAY + ' 벤다이어그램이 ' + nVenn + '문항 (한 문항 이상이어야 한다)');
+  // 개수는 고정하지 않는다. 다만 둘 다 한 문항 이상, 상한을 넘지 않아야 한다
+  ok(nAlgo >= MOCK_QUOTA.algo[0] && nAlgo <= MOCK_QUOTA.algo[1],
+     TODAY + ' 순서도가 ' + nAlgo + '문항 (' + MOCK_QUOTA.algo.join('~') + '문항이어야 한다)');
+  ok(nVenn >= MOCK_QUOTA.anyVenn[0] && nVenn <= MOCK_QUOTA.anyVenn[1],
+     TODAY + ' 벤다이어그램이 ' + nVenn + '문항 (' + MOCK_QUOTA.anyVenn.join('~') + '문항이어야 한다)');
+  algoHist[nAlgo] = (algoHist[nAlgo] || 0) + 1;
+  vennHist[nVenn] = (vennHist[nVenn] || 0) + 1;
   set.forEach((q,qi)=>{
     totalQ++;
     const tag = TODAY + ' ' + (qi+1) + '번';
@@ -386,6 +392,9 @@ ok(a === b, '같은 날 재생성 결과가 다름');
 console.log('검사한 문항 ' + totalQ + '개 — 단독 ' + soloQ + ' · 갑을 ' + pairQ + ' · 보기 ' + boxQ +
             ' · 벤 ' + vennQ + ' · 순서도 ' + algoQ + ' · 삼중 ' + trioQ +
             ' · 3중벤 ' + trioVennQ + ' · 비판 ' + critQ);
+const hist = (h)=> Object.keys(h).sort().map(k=> k + '문항 ' + h[k] + '세트').join(' · ');
+console.log('세트별 순서도 — ' + hist(algoHist));
+console.log('세트별 벤     — ' + hist(vennHist));
 console.log('출제 가능 사상가 ' + pool.usable.length + '명 · 벤다이어그램 쌍 ' + pool.venn.length + '개');
 if(fail){ console.error('실패 ' + fail + '건'); process.exit(1); }
 console.log('=== 모의고사 테스트 완료 ===');

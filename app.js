@@ -855,11 +855,19 @@ function mockTrioReady(){
 }
 
 /* 시험지 구성 — 한 세트에 반드시 들어가야 하는 것들.
-   순서도 두 문항, 벤다이어그램(2중이든 3중이든) 한 문항.
-   나머지는 지금까지처럼 무작위로 채운다. 재료가 모자라면 그만큼만 넣는다. */
-const MOCK_QUOTA = { algo:2, anyVenn:1 };
+   개수는 고정하지 않고 세트마다 이 범위 안에서 뽑는다. 순서도 하나~셋,
+   벤다이어그램(2중이든 3중이든) 하나~둘. 둘 다 적어도 하나는 들어간다.
+   나머지는 지금까지처럼 무작위로 채우므로 실제 문항 수는 이보다 많을 수 있다.
+   재료가 모자라면 그만큼만 넣는다. */
+const MOCK_QUOTA = { algo:[1,3], anyVenn:[1,2] };
+// 벤 한 자리를 3중으로 먼저 채워 볼 확률. 나머지는 2중부터 본다
+const MOCK_TRIO_VENN_RATE = 0.55;
+function mockQuotaPick(r, rng){ return r[0] + Math.floor(rng() * (r[1] - r[0] + 1)); }
 
 function buildMockQuota(pool, rng, used, qs){
+  const want = { algo: mockQuotaPick(MOCK_QUOTA.algo, rng),
+                 anyVenn: mockQuotaPick(MOCK_QUOTA.anyVenn, rng) };
+  const wantAlgo = want.algo, wantVenn = want.anyVenn;
   // 쌍이 있어야 만들 수 있는 순서도를 먼저 잡는다. 3중 벤은 삼중 판정 묶음에서
   // 따로 오므로 뒤로 미뤄도 재료가 줄지 않는다.
   const takePair = (make)=>{
@@ -872,23 +880,34 @@ function buildMockQuota(pool, rng, used, qs){
     return null;
   };
 
-  for(let k=0;k<MOCK_QUOTA.algo;k++){
+  for(let k=0;k<wantAlgo;k++){
     const q = takePair((a,b)=> buildAlgoQ(a, b, mockMainUnit(a), rng, null));
     if(!q) break;
     qs.push(q);
   }
 
-  // 벤다이어그램 한 문항 — 3중이 되면 3중을 먼저 본다
-  let venn = null;
+  // 벤다이어그램 — 3중과 2중 가운데 어느 쪽을 먼저 볼지 세트마다 뽑는다.
+  // 늘 3중을 먼저 보면 2중이 시험지에서 사라진다
   const trios = shuffleSeeded(mockTrioReady(), rng);
-  for(let i=0;i<trios.length && !venn;i++){
-    const t = trios[i];
-    if(t.some(n=> used[n] || !pool.byName[n])) continue;
-    venn = buildTrioVennQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
-    if(venn) t.forEach(n=> used[n] = 1);
+  let ti = 0;
+  const takeTrioVenn = ()=>{
+    for(; ti<trios.length; ti++){
+      const t = trios[ti];
+      if(t.some(n=> used[n] || !pool.byName[n])) continue;
+      const q = buildTrioVennQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
+      if(q){ t.forEach(n=> used[n] = 1); ti++; return q; }
+    }
+    return null;
+  };
+  const takeDuoVenn = ()=> takePair((a,b)=> buildVennQ(a, b, mockMainUnit(a), rng, null));
+  for(let k=0;k<wantVenn;k++){
+    const trioFirst = rng() < MOCK_TRIO_VENN_RATE;
+    const venn = trioFirst ? (takeTrioVenn() || takeDuoVenn())
+                           : (takeDuoVenn() || takeTrioVenn());
+    if(!venn) break;
+    qs.push(venn);
   }
-  if(!venn) venn = takePair((a,b)=> buildVennQ(a, b, mockMainUnit(a), rng, null));
-  if(venn) qs.push(venn);
+  return want;
 }
 
 /* 순서도·벤다이어그램처럼 그림이 들어가는 문항이 한곳에 몰리면 시험지가 이상해진다.
@@ -930,7 +949,7 @@ function buildMockSet(){
   const used = {};
   const qs = [];
 
-  buildMockQuota(pool, rng, used, qs);
+  const quota = buildMockQuota(pool, rng, used, qs);
 
   for(let i=0;i<order.length && qs.length < MOCK_N;i++){
     const n = order[i];
@@ -945,6 +964,11 @@ function buildMockSet(){
       acc += MOCK_MIX[order2[t]];
       if(roll < acc){ type = order2[t]; break; }
     }
+
+    // 그림 문항 수는 이 세트에서 뽑은 만큼만 — 넘으면 갑을 문항으로 돌린다
+    if(type === 'algo' && qs.filter(q=> q.type === 'algo').length >= quota.algo) type = 'pair';
+    if(type === 'venn' &&
+       qs.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length >= quota.anyVenn) type = 'pair';
 
     // 벤다이어그램은 재료가 되는 쌍이 정해져 있다
     if(type === 'venn'){
