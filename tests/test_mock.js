@@ -35,7 +35,7 @@ const start = appSrc.indexOf('const MOCK_N');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -108,6 +108,11 @@ for(let d=1; d<=40; d++){
     else names.push(q.name);
   });
   ok(new Set(names).size === names.length, TODAY + ' 사상가 중복 (' + names.length + '명 중 ' + new Set(names).size + '명)');
+  // 반드시 나와야 하는 사상가는 세트마다 한 번은 들어간다
+  MOCK_MUST.forEach(m=>{
+    if(pool.usable.indexOf(m) < 0) return;
+    ok(names.indexOf(m) >= 0, TODAY + ' ' + m + '이(가) 시험지에 없다');
+  });
   // 시험지 구성 — 순서도·벤다이어그램(2중이든 3중이든)은 세트마다 개수가 다르다
   const nAlgo = set.filter(q=> q.type === 'algo').length;
   const nVenn = set.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length;

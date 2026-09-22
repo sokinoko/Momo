@@ -942,10 +942,20 @@ function mockSpread(qs, rng){
   return out;
 }
 
+/* 반드시 나와야 하는 사상가. 세트마다 적어도 한 문항에는 들어간다.
+   차례를 맨 앞으로 당기기만 하면 된다 — 앞에 서면 자기 문항을 받거나,
+   이미 쿼터 문항(순서도·벤)에 끼어 있어서 어느 쪽이든 시험지에 나온다.
+   재료가 모자라 출제 가능 명단에 없는 사람은 건너뛴다. */
+const MOCK_MUST = ['칸트', '스피노자'];
+function mockMustFirst(order, rng){
+  const must = shuffleSeeded(MOCK_MUST.filter(n=> order.indexOf(n) >= 0), rng);
+  return must.concat(order.filter(n=> must.indexOf(n) < 0));
+}
+
 function buildMockSet(){
   const pool = mockPool();
   const rng = mulberry32(seedFromDate(mockSeedStr()));
-  const order = shuffleSeeded(pool.usable, rng);
+  const order = mockMustFirst(shuffleSeeded(pool.usable, rng), rng);
   const used = {};
   const qs = [];
 
@@ -957,6 +967,10 @@ function buildMockSet(){
     const b = pool.byName[n];
     const canRight = b.O.length >= 1 && b.X.length >= 4;
     const canWrong = b.X.length >= 1 && b.O.length >= 4;
+
+    // 반드시 나와야 하는 사람은 자기가 들어가는 문항만 받는다. 벤·순서도·비판은
+    // 재료가 없으면 엉뚱한 쌍으로 넘어가 버리므로, 그 자리에서 이 사람이 빠질 수 있다
+    const must = MOCK_MUST.indexOf(n) >= 0;
 
     let roll = rng(), acc = 0, type = 'pair';
     const order2 = ['right','wrong','box','venn','algo','trio','critique'];
@@ -973,7 +987,8 @@ function buildMockSet(){
     // 벤다이어그램은 재료가 되는 쌍이 정해져 있다
     if(type === 'venn'){
       const cands = pool.venn.filter(p=> !used[p[0]] && !used[p[1]] && (p[0] === n || p[1] === n));
-      const any = cands.length ? cands : pool.venn.filter(p=> !used[p[0]] && !used[p[1]]);
+      const any = cands.length ? cands
+                : (must ? [] : pool.venn.filter(p=> !used[p[0]] && !used[p[1]]));
       if(any.length){
         const p = shuffleSeeded(any, rng)[0];
         const q = buildVennQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
@@ -984,7 +999,9 @@ function buildMockSet(){
 
     // 알고리즘(순서도) — 벤다이어그램과 같은 쌍에서만 만들 수 있다
     if(type === 'algo'){
-      const cands = pool.venn.filter(p=> !used[p[0]] && !used[p[1]]);
+      const mine = pool.venn.filter(p=> !used[p[0]] && !used[p[1]] && (p[0] === n || p[1] === n));
+      const cands = mine.length ? mine
+                  : (must ? [] : pool.venn.filter(p=> !used[p[0]] && !used[p[1]]));
       if(cands.length){
         const p = shuffleSeeded(cands, rng)[0];
         const q = buildAlgoQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
@@ -999,7 +1016,7 @@ function buildMockSet(){
       const free = mockTrioReady().filter(w=>
         w.every(m=> !used[m] && pool.byName[m]) && mockTrioHasCrit(w));
       const cands = shuffleSeeded(free.filter(w=> w.indexOf(n) >= 0), rng)
-        .concat(shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
+        .concat(must ? [] : shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
       let cq = null;
       for(let i=0;i<cands.length && !cq;i++){
         const t = cands[i];
