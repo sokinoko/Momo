@@ -871,7 +871,7 @@ function buildMockQuota(pool, rng, used, qs){
   // 쌍이 있어야 만들 수 있는 순서도를 먼저 잡는다. 3중 벤은 삼중 판정 묶음에서
   // 따로 오므로 뒤로 미뤄도 재료가 줄지 않는다.
   const takePair = (make)=>{
-    const cands = shuffleSeeded(pool.venn.filter(p=> !used[p[0]] && !used[p[1]]), rng);
+    const cands = shuffleSeeded(pool.venn.filter(p=> mockPairFree(p, used)), rng);
     for(let i=0;i<cands.length;i++){
       const p = cands[i];
       const q = make(p[0], p[1]);
@@ -893,7 +893,7 @@ function buildMockQuota(pool, rng, used, qs){
   const takeTrioVenn = ()=>{
     for(; ti<trios.length; ti++){
       const t = trios[ti];
-      if(t.some(n=> used[n] || !pool.byName[n])) continue;
+      if(t.some(n=> used[n] || !pool.byName[n] || mockSoloOnly(n))) continue;
       const q = buildTrioVennQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
       if(q){ t.forEach(n=> used[n] = 1); ti++; return q; }
     }
@@ -947,6 +947,14 @@ function mockSpread(qs, rng){
    이미 쿼터 문항(순서도·벤)에 끼어 있어서 어느 쪽이든 시험지에 나온다.
    재료가 모자라 출제 가능 명단에 없는 사람은 건너뛴다. */
 const MOCK_MUST = ['칸트', '스피노자'];
+/* 이 사람은 반드시 단독 문항(옳은 것·옳지 않은 것)으로 낸다.
+   한 세트에 같은 사상가가 두 번 나오지 않으므로, 다른 유형의 재료로 한 번 쓰이면
+   단독으로 낼 자리가 사라진다. 그래서 쌍·조합을 고르는 모든 자리에서 미리 빼 둔다. */
+const MOCK_MUST_SOLO = ['칸트'];
+function mockSoloOnly(n){ return MOCK_MUST_SOLO.indexOf(n) >= 0; }
+function mockPairFree(p, used){
+  return !used[p[0]] && !used[p[1]] && !mockSoloOnly(p[0]) && !mockSoloOnly(p[1]);
+}
 function mockMustFirst(order, rng){
   const must = shuffleSeeded(MOCK_MUST.filter(n=> order.indexOf(n) >= 0), rng);
   return must.concat(order.filter(n=> must.indexOf(n) < 0));
@@ -979,6 +987,11 @@ function buildMockSet(){
       if(roll < acc){ type = order2[t]; break; }
     }
 
+    // 단독으로만 내는 사람은 유형 추첨을 무시한다. rng 를 더 쓰지 않도록 roll 을 다시 쓴다
+    if(mockSoloOnly(n)){
+      type = (roll < MOCK_MIX.right / (MOCK_MIX.right + MOCK_MIX.wrong)) ? 'right' : 'wrong';
+    }
+
     // 그림 문항 수는 이 세트에서 뽑은 만큼만 — 넘으면 갑을 문항으로 돌린다
     if(type === 'algo' && qs.filter(q=> q.type === 'algo').length >= quota.algo) type = 'pair';
     if(type === 'venn' &&
@@ -986,9 +999,9 @@ function buildMockSet(){
 
     // 벤다이어그램은 재료가 되는 쌍이 정해져 있다
     if(type === 'venn'){
-      const cands = pool.venn.filter(p=> !used[p[0]] && !used[p[1]] && (p[0] === n || p[1] === n));
+      const cands = pool.venn.filter(p=> mockPairFree(p, used) && (p[0] === n || p[1] === n));
       const any = cands.length ? cands
-                : (must ? [] : pool.venn.filter(p=> !used[p[0]] && !used[p[1]]));
+                : (must ? [] : pool.venn.filter(p=> mockPairFree(p, used)));
       if(any.length){
         const p = shuffleSeeded(any, rng)[0];
         const q = buildVennQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
@@ -999,9 +1012,9 @@ function buildMockSet(){
 
     // 알고리즘(순서도) — 벤다이어그램과 같은 쌍에서만 만들 수 있다
     if(type === 'algo'){
-      const mine = pool.venn.filter(p=> !used[p[0]] && !used[p[1]] && (p[0] === n || p[1] === n));
+      const mine = pool.venn.filter(p=> mockPairFree(p, used) && (p[0] === n || p[1] === n));
       const cands = mine.length ? mine
-                  : (must ? [] : pool.venn.filter(p=> !used[p[0]] && !used[p[1]]));
+                  : (must ? [] : pool.venn.filter(p=> mockPairFree(p, used)));
       if(cands.length){
         const p = shuffleSeeded(cands, rng)[0];
         const q = buildAlgoQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
@@ -1014,7 +1027,7 @@ function buildMockSet(){
     if(type === 'critique'){
       // 비판 문구가 달린 문장이 있는 조합만 후보다. 하나 실패하면 다음 후보로 넘어간다
       const free = mockTrioReady().filter(w=>
-        w.every(m=> !used[m] && pool.byName[m]) && mockTrioHasCrit(w));
+        w.every(m=> !used[m] && pool.byName[m] && !mockSoloOnly(m)) && mockTrioHasCrit(w));
       const cands = shuffleSeeded(free.filter(w=> w.indexOf(n) >= 0), rng)
         .concat(must ? [] : shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
       let cq = null;
@@ -1031,7 +1044,8 @@ function buildMockSet(){
     if(type === 'trio'){
       const unit3 = mockMainUnit(n);
       const mates3 = (pool.unitMembers[unit3] || [])
-        .filter(m=> m !== n && !used[m] && !mockSameSchool(n,m) && pool.byName[m].X.length >= 2);
+        .filter(m=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n,m)
+                 && pool.byName[m].X.length >= 2);
       if(mates3.length >= 2 && pool.byName[n].X.length >= 2 && pool.byName[n].O.length >= 1){
         const pick2 = shuffleSeeded(mates3, rng).slice(0,2);
         const q = buildTrioQ(n, pick2[0], pick2[1], unit3, rng, null);
@@ -1045,8 +1059,9 @@ function buildMockSet(){
       const topic = mockMainTopic(n);
       // 같은 주제(평화 사상·국가의 역할…) 안에서 묶기도 하고,
       // 같은 단원 안이라면 주제가 달라도 묶는다. 스피노자와 스토아처럼 실제로 자주 붙는 조합이 있다.
-      const near = (pool.topicMembers[topic] || []).filter(m=> m !== n && !used[m] && !mockSameSchool(n,m));
-      const wide = (pool.unitMembers[unit] || []).filter(m=> m !== n && !used[m] && !mockSameSchool(n,m));
+      const mateOk = (m)=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n,m);
+      const near = (pool.topicMembers[topic] || []).filter(mateOk);
+      const wide = (pool.unitMembers[unit] || []).filter(mateOk);
       const useNear = near.length && (rng() < 0.5 || !wide.length);
       const mates = useNear ? near : wide;
       const sharedTopic = useNear ? topic : null;
