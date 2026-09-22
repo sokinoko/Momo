@@ -650,7 +650,30 @@ function loadStore(){
    라벨 없이 다른 사상가 선지를 섞으면 답이 둘이 되므로 절대 그렇게 하지 않는다.
    =================================================================== */
 
-const MOCK_N = 20;
+/* 시험지 크기 — 온전한 한 세트(20문항 30분)와 반절·조각 세트.
+   문항 수마다 제한 시간과 그림 문항 쿼터가 따로 있다. */
+const MOCK_SIZES = [
+  { n:5,  min:7,  label:'조각', quota:{ algo:[0,1], anyVenn:[0,1] } },
+  { n:10, min:15, label:'반절', quota:{ algo:[1,2], anyVenn:[1,1] } },
+  { n:20, min:30, label:'온전', quota:{ algo:[2,3], anyVenn:[1,2] } },
+];
+const MOCK_N = 20;                                   // 온전한 한 세트
+function mockSizeOf(n){
+  for(let i=0;i<MOCK_SIZES.length;i++){ if(MOCK_SIZES[i].n === n) return MOCK_SIZES[i]; }
+  return MOCK_SIZES[MOCK_SIZES.length - 1];
+}
+// 지금 고른 크기. 아무것도 안 골랐으면 온전한 한 세트다(옛 기록도 여기로 들어온다)
+function mockSetN(){ return mockSizeOf(STATE.quiz && STATE.quiz.size).n; }
+// 채점·시계는 그 시험지가 만들어질 때의 크기를 따른다
+function mockRunN(run){ return (run && run.n) || MOCK_N; }
+function mockRunLimit(run){ return ((run && run.limit) || mockSizeOf(mockRunN(run)).min) * 60000; }
+function setMockSize(n){
+  if(mockSetN() === n) return;
+  STATE.quiz.size = n;
+  ensureMockRun();
+  saveStore();
+  render();
+}
 // 유형 비율. 남는 몫이 pair(갑·을 5지선다)
 const MOCK_MIX = { right:0.26, wrong:0.18, box:0.15, venn:0.05, algo:0.05, trio:0.06, critique:0.05 };
 
@@ -832,7 +855,10 @@ function mockPool(){
   return MOCK_CACHE;
 }
 
-function mockSeedStr(){ return todayStr() + '#' + (STATE.quiz.setNo || 0); }
+function mockSeedStr(){
+  const n = mockSetN();
+  return todayStr() + '#' + (STATE.quiz.setNo || 0) + (n === MOCK_N ? '' : '/' + n);
+}
 
 function mockMainUnit(name){
   const b = mockPool().byName[name];
@@ -859,14 +885,15 @@ function mockTrioReady(){
    벤다이어그램(2중이든 3중이든) 하나~둘. 순서도는 반드시 두 문항 이상 나온다.
    나머지는 지금까지처럼 무작위로 채우므로 실제 문항 수는 이보다 많을 수 있다.
    재료가 모자라면 그만큼만 넣는다. */
-const MOCK_QUOTA = { algo:[2,3], anyVenn:[1,2] };
+function mockQuotaOf(){ return mockSizeOf(mockSetN()).quota; }
 // 벤 한 자리를 3중으로 먼저 채워 볼 확률. 나머지는 2중부터 본다
 const MOCK_TRIO_VENN_RATE = 0.55;
 function mockQuotaPick(r, rng){ return r[0] + Math.floor(rng() * (r[1] - r[0] + 1)); }
 
 function buildMockQuota(pool, rng, used, qs){
-  const want = { algo: mockQuotaPick(MOCK_QUOTA.algo, rng),
-                 anyVenn: mockQuotaPick(MOCK_QUOTA.anyVenn, rng) };
+  const qt = mockQuotaOf();
+  const want = { algo: mockQuotaPick(qt.algo, rng),
+                 anyVenn: mockQuotaPick(qt.anyVenn, rng) };
   const wantAlgo = want.algo, wantVenn = want.anyVenn;
   // 쌍이 있어야 만들 수 있는 순서도를 먼저 잡는다. 3중 벤은 삼중 판정 묶음에서
   // 따로 오므로 뒤로 미뤄도 재료가 줄지 않는다.
@@ -969,7 +996,8 @@ function buildMockSet(){
 
   const quota = buildMockQuota(pool, rng, used, qs);
 
-  for(let i=0;i<order.length && qs.length < MOCK_N;i++){
+  const want_n = mockSetN();
+  for(let i=0;i<order.length && qs.length < want_n;i++){
     const n = order[i];
     if(used[n]) continue;
     const b = pool.byName[n];
@@ -1680,8 +1708,10 @@ function ensureMockRun(){
   const q = STATE.quiz;
   const today = todayStr();
   const setNo = q.setNo || 0;
-  if(!q.run || q.run.date !== today || q.run.setNo !== setNo){
-    q.run = { date:today, setNo:setNo, picks:[], submitted:false, score:0 };
+  const n = mockSetN();
+  if(!q.run || q.run.date !== today || q.run.setNo !== setNo || mockRunN(q.run) !== n){
+    q.run = { date:today, setNo:setNo, n:n, limit:mockSizeOf(n).min,
+              picks:[], submitted:false, score:0 };
   }
   mockRunDefaults(q.run);
   return q.run;
@@ -1695,13 +1725,15 @@ function mockRunDefaults(run){
   if(typeof run.ms !== 'number') run.ms = 0;      // 시험지를 펴 놓은 총 시간(ms)
   if(typeof run.mark !== 'number') run.mark = 0;  // 마지막으로 답을 고른 시점(ms)
   if(!run.starred) run.starred = [];  // 채점할 때 자동으로 별표한 선지 id
+  if(typeof run.n !== 'number') run.n = MOCK_N;            // 옛 기록은 20문항 30분이었다
+  if(typeof run.limit !== 'number') run.limit = mockSizeOf(run.n).min;
   return run;
 }
 // 시험지 표시(연필) 개수
 function mockAnsweredCount(){
   const run = ensureMockRun();
   let n = 0;
-  for(let i=0;i<MOCK_N;i++){ if(run.picks[i] !== undefined && run.picks[i] !== null) n++; }
+  for(let i=0;i<mockRunN(run);i++){ if(run.picks[i] !== undefined && run.picks[i] !== null) n++; }
   return n;
 }
 // 채점에 쓰는 답 — OMR. OMR이 없던 옛 기록은 시험지 표시로 채점됐다
@@ -1711,14 +1743,14 @@ function mockAns(run, i){
 }
 function mockOmrCount(run){
   let n = 0;
-  for(let i=0;i<MOCK_N;i++){ if(mockAns(run, i) !== null) n++; }
+  for(let i=0;i<mockRunN(run);i++){ if(mockAns(run, i) !== null) n++; }
   return n;
 }
 // 시험지에 표시한 답과 OMR이 다른 문항 (OMR을 비워 둔 것 포함)
 function mockMismatch(run){
   if(!run.omr) return [];
   const out = [];
-  for(let i=0;i<MOCK_N;i++){
+  for(let i=0;i<mockRunN(run);i++){
     const p = run.picks[i], o = run.omr[i];
     const hasP = (p !== undefined && p !== null), hasO = (o !== undefined && o !== null);
     if(hasP && p !== (hasO ? o : null)) out.push(i);
@@ -1735,7 +1767,7 @@ function mockMismatch(run){
    답을 바꾸러 돌아가면 그 사이 시간은 바꾼 문항에 더해진다.
    마지막으로 답을 고른 뒤부터 제출까지는 「검토」로 따로 센다.
 */
-const MOCK_LIMIT_MS = 30 * 60 * 1000;          // 제한 시간 30분 (실제 시험과 같게)
+const MOCK_LIMIT_MS = 30 * 60 * 1000;          // 온전한 세트의 제한 시간(옛 이름 · 기본값)
 const MOCK_WARN_MS = [5 * 60 * 1000, 60 * 1000];  // 남은 시간 5분 · 1분에 알림
 let MOCK_CLOCK = { on:false, since:0, timer:null, beat:0 };
 function mockNow(){ return Date.now(); }
@@ -1771,11 +1803,11 @@ function mockClockTick(){
   MOCK_CLOCK.beat++;
   if(MOCK_CLOCK.beat % 5 === 0){ mockClockCommit(run); saveStore(); }
   const live = mockLiveMs(run);
-  if(live >= MOCK_LIMIT_MS){ mockTimeUp(); return; }
+  if(live >= mockRunLimit(run)){ mockTimeUp(); return; }
   mockWarnCheck(run, live);
   if(typeof document !== 'undefined') mockPaintClock(live);
 }
-function mockLeftMs(ms){ return Math.max(0, MOCK_LIMIT_MS - (ms || 0)); }
+function mockLeftMs(ms, run){ return Math.max(0, mockRunLimit(run || STATE.quiz.run) - (ms || 0)); }
 function mockPaintClock(live){
   const left = mockLeftMs(live);
   const txt = mockFmtClock(left);
@@ -1794,7 +1826,7 @@ function mockWarnCheck(run, live){
   MOCK_WARN_MS.forEach((w, k)=>{
     if(left <= w && !run.warned[k]){
       run.warned[k] = 1;
-      const miss = MOCK_N - mockOmrCount(run);
+      const miss = mockRunN(run) - mockOmrCount(run);
       mockToast((w >= 60000 ? Math.round(w/60000) + '분' : '1분') + ' 남았어요' +
                 (miss ? ' · OMR ' + miss + '문항이 비어 있어요' : ''));
       if(typeof document !== 'undefined'){
@@ -1824,7 +1856,7 @@ function mockTimeUp(){
   const run = STATE.quiz.run;
   if(!run || run.submitted) return;
   mockClockCommit(run);
-  run.ms = Math.min(run.ms, MOCK_LIMIT_MS);
+  run.ms = Math.min(run.ms, mockRunLimit(run));
   run.timeUp = true;
   submitMock(true);
   mockToast('시험 시간이 끝나 OMR 답안으로 채점했어요');
@@ -1834,7 +1866,7 @@ function mockClockSync(){
   const run = STATE.quiz.run;
   const hidden = (typeof document !== 'undefined' && document.visibilityState === 'hidden');
   const want = NAV.view === 'mockExam' && run && !run.submitted && run.date === todayStr() && !hidden;
-  if(want && (run.ms || 0) >= MOCK_LIMIT_MS){
+  if(want && (run.ms || 0) >= mockRunLimit(run)){
     // 이미 시간을 다 쓴 시험지를 다시 연 경우 — 그리는 도중이라 한 박자 늦춰 채점한다
     setTimeout(mockTimeUp, 0);
     return;
@@ -1909,7 +1941,7 @@ function jumpMockQ(i){
   if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 function mockSubmitNote(run){
-  const miss = MOCK_N - mockOmrCount(run);
+  const miss = mockRunN(run) - mockOmrCount(run);
   return miss ? ('OMR ' + miss + '문항이 비어 있어요. 채점은 OMR로 합니다') : 'OMR에 마킹한 답으로 채점합니다';
 }
 
@@ -1954,7 +1986,11 @@ function mockStarIds(set, run){
   });
   return ids;
 }
-function mockHistKey(run){ return run.setNo ? (run.date + '#' + run.setNo) : run.date; }
+function mockHistKey(run){
+  const n = mockRunN(run);
+  const base = run.setNo ? (run.date + '#' + run.setNo) : run.date;
+  return base + (n === MOCK_N ? '' : '/' + n);
+}
 
 // force: 시간 종료처럼 묻지 않고 바로 채점
 // 확인 창은 홈 화면 앱에서 막히므로 쓰지 않는다. OMR이 비어 있으면 버튼을 한 번 더 누르게 한다.
