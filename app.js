@@ -1484,6 +1484,22 @@ function mockTrioSets(){
 function mockTrioOf(a, b, c){
   return mockTrioSets()[[a,b,c].slice().sort().join('|')] || null;
 }
+// 받침에 맞는 조사. 「아퀴나스 는」처럼 띄어 쓰지 않으려면 이게 필요하다
+function mockJo(w, withB, noB){
+  const ch = w.charCodeAt(w.length - 1) - 0xAC00;
+  const has = (ch >= 0 && ch <= 11171) ? (ch % 28) !== 0 : true;
+  return w + (has ? withB : noB);
+}
+// 선지 id 로 원래 항목을 찾는다 — 기출이든 자체 제작이든
+let MOCK_ITEM_BY_ID = null;
+function mockItemById(id){
+  if(!MOCK_ITEM_BY_ID){
+    MOCK_ITEM_BY_ID = {};
+    mockSourceItems().forEach(it=>{ MOCK_ITEM_BY_ID[it.id] = it; });
+  }
+  return MOCK_ITEM_BY_ID[id] || null;
+}
+
 // P 에 대해 X 가 Y 에게 비판을 제기할 수 있는가
 function mockCanCritique(p, x, y){ return p.ans[x] === 'O' && p.ans[y] === 'X'; }
 // 비판 문항으로 쓸 수 있는 조합인가 — 비판 문구가 달린 문장이 하나라도 있어야 한다
@@ -1575,12 +1591,28 @@ function buildCritiqueQ(a, b, c, unit, rng, pairTopic){
   MOCK_CRIT_ARROWS.forEach(ar=>{
     usable.forEach(p=>{
       const f = who[ar.from], t = who[ar.to];
+      // 왜 되고 왜 안 되는지를 O/X 표가 아니라 그 사람의 근거로 말한다
+      const why = (name)=>{
+        const it = mockItemById(p.id[name]);
+        return (it && it.note) ? (' — ' + it.note) : '.';
+      };
+      const src = mockItemById(p.id[f]) || {};
+      let note;
+      if(mockCanCritique(p, f, t)){
+        note = mockJo(f, '은', '는') + ' 「' + p.body + '」를 받아들인다' + why(f)
+             + ' 반대로 ' + mockJo(t, '은', '는') + ' 이것을 받아들이지 않는다' + why(t)
+             + ' 상대가 부정하는 자리를 짚었으므로 ' + mockJo(f, '이', '가') + ' ' + t
+             + '에게 제기할 수 있는 비판이 된다.';
+      } else if(p.ans[f] === 'X'){
+        note = mockJo(f, '은', '는') + ' 「' + p.body + '」를 스스로 받아들이지 않는다' + why(f)
+             + ' 자기가 부정하는 주장을 남에게 비판으로 내밀 수는 없다.';
+      } else {
+        note = mockJo(t, '은', '는') + ' 이미 「' + p.body + '」를 받아들이고 있다' + why(t)
+             + ' 비판은 상대가 부정하는 자리를 짚어야 하므로 이 화살표에는 올 수 없다.';
+      }
       const rec = { arrow:ar.k, from:f, to:t, crit:p.crit, body:p.body, id:p.id[f],
-        note: (mockCanCritique(p, f, t)
-          ? f + ' 는 이 문장을 O 로, ' + t + ' 는 X 로 받는다. 그래서 ' + f + ' 가 ' + t
-            + ' 에게 제기할 수 있는 비판이 된다.'
-          : f + ' ' + p.ans[f] + ' · ' + t + ' ' + p.ans[t] + ' 다. 비판이 성립하려면 앞사람이 O, '
-            + '뒷사람이 X 여야 하는데 그렇지 않으므로 이 화살표에 올 수 없다.') };
+        note:note, src:src.source || src.src || null,
+        psid:src.psid || null, quote:src.quote || null };
       (mockCanCritique(p, who[ar.from], who[ar.to]) ? ok : bad).push(rec);
     });
   });
@@ -1600,7 +1632,7 @@ function buildCritiqueQ(a, b, c, unit, rng, pairTopic){
     .sort((x,y)=> x.arrow.charCodeAt(0) - y.arrow.charCodeAt(0));
   const ps = who.map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
   return { type:'critique', who:who, unit:unit, pairTopic:pairTopic||null, psList:ps,
-           choices:choices.map(x=> Object.assign({}, x, { src:'자체 제작' })),
+           choices:choices,
            ans:choices.indexOf(ans) };
 }
 
