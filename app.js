@@ -939,13 +939,18 @@ function buildMockSet(){
 
     // 서로에게 제기할 수 있는 비판 — 삼중 판정이 갖춰진 조합에서만
     if(type === 'critique'){
-      const t = shuffleSeeded(mockTrioReady().filter(w=>
-        w.every(m=> !used[m] && pool.byName[m]) && (w.indexOf(n) >= 0)), rng)[0]
-        || shuffleSeeded(mockTrioReady().filter(w=> w.every(m=> !used[m] && pool.byName[m])), rng)[0];
-      if(t){
-        const q = buildCritiqueQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
-        if(q){ qs.push(q); t.forEach(m=> used[m] = 1); continue; }
+      // 비판 문구가 달린 문장이 있는 조합만 후보다. 하나 실패하면 다음 후보로 넘어간다
+      const free = mockTrioReady().filter(w=>
+        w.every(m=> !used[m] && pool.byName[m]) && mockTrioHasCrit(w));
+      const cands = shuffleSeeded(free.filter(w=> w.indexOf(n) >= 0), rng)
+        .concat(shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
+      let cq = null;
+      for(let i=0;i<cands.length && !cq;i++){
+        const t = cands[i];
+        cq = buildCritiqueQ(t[0], t[1], t[2], mockMainUnit(t[0]), rng, null);
+        if(cq) t.forEach(m=> used[m] = 1);
       }
+      if(cq){ qs.push(cq); continue; }
       type = 'pair';
     }
 
@@ -1313,21 +1318,50 @@ function mockTrioSets(){
   if(MOCK_TRIO_CACHE) return MOCK_TRIO_CACHE;
   const names = mockNameList();
   const byBody = {};
-  ((typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS) ? CMP_ITEMS : []).forEach(it=>{
-    if(it.set !== '삼중-자체' || !it.crit) return;
+  const put = (body, name, ans, id, crit)=>{
+    const b = byBody[body] || (byBody[body] = { body:body, crit:crit||'', ans:{}, id:{} });
+    if(crit && !b.crit) b.crit = crit;
+    if(b.ans[name] && b.ans[name] !== ans) b.bad = 1;   // 판정이 엇갈리면 이 문장은 버린다
+    b.ans[name] = ans;
+    b.id[name] = b.id[name] || id;
+  };
+  // 기출이든 자체 제작이든, 판정을 읽어 낼 수 있는 선지는 다 모은다.
+  //   단독 「A는 P」          → A 판정 하나
+  //   「A와 B는 모두 P」 O     → A·B 둘 다 O    (X면 누가 X인지 모르므로 쓸 수 없다)
+  //   「A는 B와 달리 P」 O     → A 는 O, B 는 X
+  // 본문이 글자 그대로 같아야 한 문장으로 합쳐진다.
+  mockSourceItems().forEach(it=>{
+    const pr = mockSplitPair(it.text, names);
+    if(pr){
+      if(it.answer === 'O'){
+        const body = pr.body.replace(/^모두\s*/, '');
+        put(body, pr.a, 'O', it.id, it.crit); put(body, pr.b, 'O', it.id, it.crit);
+      }
+      return;
+    }
+    const df = mockSplitDiff(it.text, names);
+    if(df){
+      if(it.answer === 'O'){
+        put(df.body, df.a, 'O', it.id, it.crit); put(df.body, df.b, 'X', it.id, it.crit);
+      }
+      return;
+    }
     const sp = mockSplit(it.text, names);
-    if(!sp) return;
-    const b = byBody[sp.body] || (byBody[sp.body] = { body:sp.body, crit:it.crit, ans:{}, id:{} });
-    b.ans[sp.name] = it.answer;
-    b.id[sp.name] = it.id;
+    if(sp) put(sp.body, sp.name, it.answer, it.id, it.crit);
   });
   const out = {};
   Object.keys(byBody).forEach(k=>{
     const b = byBody[k];
+    if(b.bad) return;                     // 판정이 엇갈리는 문장은 버린다
     const who = Object.keys(b.ans);
-    if(who.length !== 3) return;
-    const key = who.slice().sort().join('|');
-    (out[key] || (out[key] = { who:who.slice().sort(), list:[] })).list.push(b);
+    if(who.length < 3) return;
+    // 세 사람 이상이면 가능한 세 명 조합을 다 만든다
+    for(let i=0;i<who.length-2;i++)
+      for(let j=i+1;j<who.length-1;j++)
+        for(let k2=j+1;k2<who.length;k2++){
+          const t = [who[i], who[j], who[k2]].sort();
+          (out[t.join('|')] || (out[t.join('|')] = { who:t, list:[] })).list.push(b);
+        }
   });
   MOCK_TRIO_CACHE = out;
   return out;
@@ -1338,6 +1372,11 @@ function mockTrioOf(a, b, c){
 }
 // P 에 대해 X 가 Y 에게 비판을 제기할 수 있는가
 function mockCanCritique(p, x, y){ return p.ans[x] === 'O' && p.ans[y] === 'X'; }
+// 비판 문항으로 쓸 수 있는 조합인가 — 비판 문구가 달린 문장이 하나라도 있어야 한다
+function mockTrioHasCrit(w){
+  const set = mockTrioOf(w[0], w[1], w[2]);
+  return !!(set && set.list.some(p=> p.crit));
+}
 
 /* ---------- 3중 벤다이어그램 ----------
    일곱 영역 가운데 「셋 모두」는 반드시 넣고 나머지 셋을 골라 A~D 로 이름 붙인다.
@@ -1418,8 +1457,9 @@ function buildCritiqueQ(a, b, c, unit, rng, pairTopic){
   const pool = mockPool();
   const who = [a, b, c];
   const ok = [], bad = [];
+  const usable = set.list.filter(p=> p.crit);   // 비판 문구가 있어야 선지로 쓸 수 있다
   MOCK_CRIT_ARROWS.forEach(ar=>{
-    set.list.forEach(p=>{
+    usable.forEach(p=>{
       const f = who[ar.from], t = who[ar.to];
       const rec = { arrow:ar.k, from:f, to:t, crit:p.crit, body:p.body, id:p.id[f],
         note: (mockCanCritique(p, f, t)
