@@ -974,16 +974,19 @@ function mockSpread(qs, rng){
    이미 쿼터 문항(순서도·벤)에 끼어 있어서 어느 쪽이든 시험지에 나온다.
    재료가 모자라 출제 가능 명단에 없는 사람은 건너뛴다. */
 const MOCK_MUST = ['칸트', '스피노자'];
+// 고정은 온전한 한 세트에서만 건다. 5·10문항짜리에서는 두 사람이 자리의 절반을
+// 차지해 버리므로 크기가 작으면 고정을 풀고 여느 사상가와 똑같이 뽑는다
+function mockMustList(){ return mockSetN() === MOCK_N ? MOCK_MUST : []; }
 /* 이 사람은 반드시 단독 문항(옳은 것·옳지 않은 것)으로 낸다.
    한 세트에 같은 사상가가 두 번 나오지 않으므로, 다른 유형의 재료로 한 번 쓰이면
    단독으로 낼 자리가 사라진다. 그래서 쌍·조합을 고르는 모든 자리에서 미리 빼 둔다. */
 const MOCK_MUST_SOLO = ['칸트'];
-function mockSoloOnly(n){ return MOCK_MUST_SOLO.indexOf(n) >= 0; }
+function mockSoloOnly(n){ return mockSetN() === MOCK_N && MOCK_MUST_SOLO.indexOf(n) >= 0; }
 function mockPairFree(p, used){
   return !used[p[0]] && !used[p[1]] && !mockSoloOnly(p[0]) && !mockSoloOnly(p[1]);
 }
 function mockMustFirst(order, rng){
-  const must = shuffleSeeded(MOCK_MUST.filter(n=> order.indexOf(n) >= 0), rng);
+  const must = shuffleSeeded(mockMustList().filter(n=> order.indexOf(n) >= 0), rng);
   return must.concat(order.filter(n=> must.indexOf(n) < 0));
 }
 
@@ -1006,7 +1009,7 @@ function buildMockSet(){
 
     // 반드시 나와야 하는 사람은 자기가 들어가는 문항만 받는다. 벤·순서도·비판은
     // 재료가 없으면 엉뚱한 쌍으로 넘어가 버리므로, 그 자리에서 이 사람이 빠질 수 있다
-    const must = MOCK_MUST.indexOf(n) >= 0;
+    const must = mockMustList().indexOf(n) >= 0;
 
     let roll = rng(), acc = 0, type = 'pair';
     const order2 = ['right','wrong','box','venn','algo','trio','critique'];

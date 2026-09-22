@@ -115,13 +115,13 @@ for(let d=1; d<=40 * SIZES.length; d++){
     else names.push(q.name);
   });
   ok(new Set(names).size === names.length, TODAY + ' 사상가 중복 (' + names.length + '명 중 ' + new Set(names).size + '명)');
-  // 반드시 나와야 하는 사상가는 세트마다 한 번은 들어간다
-  MOCK_MUST.forEach(m=>{
+  // 고정은 온전한 한 세트에서만 — 반드시 나와야 하는 사상가
+  (N === MOCK_N ? MOCK_MUST : []).forEach(m=>{
     if(pool.usable.indexOf(m) < 0) return;
     ok(names.indexOf(m) >= 0, TODAY + ' ' + m + '이(가) 시험지에 없다');
   });
-  // 단독으로만 내는 사람은 언제나 단독 문항이어야 한다
-  MOCK_MUST_SOLO.forEach(m=>{
+  // 단독으로만 내는 사람은 언제나 단독 문항이어야 한다(온전한 세트에서만)
+  (N === MOCK_N ? MOCK_MUST_SOLO : []).forEach(m=>{
     if(pool.usable.indexOf(m) < 0) return;
     const mine = set.filter(q=> q.name === m || q.a === m || q.b === m ||
                                (q.who && q.who.indexOf(m) >= 0));
