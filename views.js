@@ -1309,6 +1309,7 @@ function renderMockResult(){
   const lost = slips.filter(i=> run.picks[i] === set[i].ans);
   const showIdx = [];
   set.forEach((q,i)=>{ if(mockAns(run, i) !== q.ans || run.guess[i]) showIdx.push(i); });
+  const mine = mockMineItems(set);
   const nWrong = set.filter((q,i)=> mockAns(run, i) !== q.ans).length;
   const nGuess = set.filter((q,i)=> run.guess[i]).length;
   const answered = set.filter((q,i)=> run.picks[i] !== undefined && run.picks[i] !== null).length;
@@ -1349,6 +1350,23 @@ function renderMockResult(){
         <div><b>★ ${run.starred.length}개</b>를 기출OX 별표에 넣었어요</div>
         <div class="note">틀린 문항 ${nWrong}개의 헷갈린 선지와 찍은 문항 ${nGuess}개의 선지예요. 아래에서 ☆를 누르면 뺄 수 있어요.</div>
         <button class="btn btn-sm btn-primary" style="margin-top:9px;" onclick="studyStarred()">별표 선지 풀기</button>
+      </div>` : ''}
+
+    ${mine.length ? `
+      <div class="section-title">자체 제작 선지 ${mine.length}개
+        <span class="note" style="font-weight:400;">기출에 없는 문장이라 맞고 틀림과 상관없이 해설을 답니다</span></div>
+      <div class="hard-box mock-minebox">
+        ${mine.map(m=>`<div class="mock-mine-row">
+          <div class="mock-mine-top">
+            <a href="javascript:void 0" onclick="mockJump(${m.no-1})">${m.no}번</a>
+            <span class="ox ${m.item.answer === 'O' ? 't' : 'f'}">${m.item.answer}</span>
+            ${mockStarBtn(m.item.id)}
+          </div>
+          <div class="tx">${escHtml(m.item.text)}</div>
+          ${m.item.note ? `<div class="mock-rv-note">${escHtml(m.item.note)}</div>` : ''}
+          ${m.item.answer === 'X' && m.item.fix ? `<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(m.item.fix)}</div>` : ''}
+          ${mockSrcNote(m.item)}
+        </div>`).join('')}
       </div>` : ''}
 
     ${showIdx.length ? `<div class="section-title">다시 볼 문항 ${showIdx.length}개 <span class="note" style="font-weight:400;">틀림 ${nWrong} · 찍음 ${nGuess}</span></div>` : `
@@ -1398,7 +1416,8 @@ function renderMockReview(q, i, run){
       ${q.choices.map((c,ci)=>{
         const isAns = ci === q.ans, isMine = ci === picked;
         const truth = mockChoiceTruth(q, ci);
-        const open = isAns || isMine;
+        // 틀렸거나 안 고른 문항은 고르지 않은 선지까지 전부 푼다
+        const open = !ok || isAns || isMine;
         let notes = '';
         if(open){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;

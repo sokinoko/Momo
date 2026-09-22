@@ -1062,6 +1062,32 @@ function buildMockSet(){
 }
 
 
+/* ---------- 자체 제작 선지 모아보기 ----------
+   기출이 아니라 우리가 만든 문장이라 처음 보는 것이다. 맞혔다고 넘기면 근거를 모른 채
+   지나가므로, 세트에 나온 자체 제작 선지는 맞고 틀림과 상관없이 해설을 한 번씩 모아 둔다. */
+let MOCK_CMP_BY_ID = null;
+function mockCmpById(id){
+  if(!MOCK_CMP_BY_ID){
+    MOCK_CMP_BY_ID = {};
+    (typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS ? CMP_ITEMS : []).forEach(it=>{ MOCK_CMP_BY_ID[it.id] = it; });
+  }
+  return MOCK_CMP_BY_ID[id] || null;
+}
+// 세트에 나온 자체 제작 선지를 문항 순서대로. 같은 선지가 두 번 나오면 한 번만 담는다
+function mockMineItems(set){
+  const out = [], seen = {};
+  (set || []).forEach((q, i)=>{
+    (q.items || q.choices || []).forEach(c=>{
+      if(!c || !c.id || seen[c.id]) return;
+      const it = mockCmpById(c.id);
+      if(!it) return;
+      seen[c.id] = 1;
+      out.push({ no: i + 1, item: it });
+    });
+  });
+  return out;
+}
+
 /* ---------- 발문 만들기 ----------
    실제 시험지 발문을 그대로 흉내 낸다.
      「근대 서양 사상가 갑, 을의 입장으로 옳은 것은?」

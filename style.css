@@ -1199,6 +1199,22 @@ mark.ps-clue{
   padding-left:8px;
 }
 
+/* 세트에 나온 자체 제작 선지 모아보기. 맞고 틀림과 상관없이 해설이 붙는다 */
+.mock-minebox{ padding:4px 14px 13px; margin-top:12px; }
+.mock-mine-row{ padding-top:12px; }
+.mock-mine-row + .mock-mine-row{ margin-top:12px; border-top:1px dashed var(--rule); }
+.mock-mine-top{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--font-note); font-size:11px; color:var(--ink-faint);
+}
+.mock-mine-top a{ color:var(--blue); text-decoration:none; font-weight:700; }
+.mock-mine-top .ox{ font-family:var(--font-exam); font-weight:800; font-size:12px; }
+.mock-mine-top .ox.t{ color:#2E6B4F; }
+.mock-mine-top .ox.f{ color:var(--red); }
+.mock-mine-row .tx{
+  margin-top:5px; font-family:var(--font-exam); font-size:13.4px; line-height:1.7;
+}
+
 /* 기출이 아니라 우리가 만든 선지. 기출과 섞이지 않게 작은 딱지를 붙인다 */
 .mock-mine{
   display:inline-block; margin-left:5px; vertical-align:1px;
