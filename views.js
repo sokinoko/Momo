@@ -278,10 +278,10 @@ function renderHome(){
 // 홈 카드에 쓸 오늘 모의고사 한 줄
 function mockTodayLine(){
   const run = ensureMockRun();
-  if(run.submitted) return `채점 완료 <b>${run.score} / ${MOCK_N}</b>`;
+  if(run.submitted) return `채점 완료 <b>${run.score} / ${mockRunN(run)}</b>`;
   const done = mockAnsweredCount();
-  if(done > 0) return `풀던 시험지 <b>${done} / ${MOCK_N}</b>`;
-  return `<b>${MOCK_N}</b>문항 대기 중`;
+  if(done > 0) return `풀던 시험지 <b>${done} / ${mockRunN(run)}</b>`;
+  return `<b>${mockSetN()}</b>문항 대기 중`;
 }
 
 /* ---------- 사상가별 정리 : 목록 ---------- */
@@ -1114,12 +1114,13 @@ function mockJump(i){
 /* ---------- 시작 화면 ---------- */
 function renderMockSetup(){
   const pool = mockPool();
-  if(pool.usable.length < MOCK_N){
+  if(pool.usable.length < mockSetN()){
     return `<div class="screen"><div class="empty"><div class="ic">無</div>
       아직 문제를 만들 만큼 선지가 모이지 않았어요<br>
-      <span class="note">출제 가능한 사상가 ${pool.usable.length}명 · ${MOCK_N}명 필요</span></div></div>`;
+      <span class="note">출제 가능한 사상가 ${pool.usable.length}명 · ${mockSetN()}명 필요</span></div></div>`;
   }
   const run = ensureMockRun();
+  const sz = mockSizeOf(mockSetN());
   const done = mockAnsweredCount();
   const hist = mockHistoryList();
   const avg = hist.length
@@ -1132,22 +1133,27 @@ function renderMockSetup(){
   if(run.submitted){
     card = `
       <div class="mock-hero-label">오늘 ${run.setNo ? (run.setNo+1) + '번째 세트 ' : ''}채점 완료</div>
-      <div class="mock-hero-score"><b>${run.score}</b><span> / ${MOCK_N}</span></div>
+      <div class="mock-hero-score"><b>${run.score}</b><span> / ${mockRunN(run)}</span></div>
       ${run.ms ? `<div class="note" style="margin-top:6px;">${mockFmtDur(run.ms)} 걸림</div>` : ''}
       <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="go('mockResult')">채점 결과 · 해설 보기</button>
       <button class="btn btn-block" style="margin-top:9px;" onclick="newMockSet()">새 세트로 한 판 더</button>`;
   } else if(done > 0 || run.ms > 0 || mockOmrCount(run) > 0){
     card = `
       <div class="mock-hero-label">풀던 시험지가 있어요</div>
-      <div class="mock-hero-score"><b>${mockOmrCount(run)}</b><span> / ${MOCK_N} OMR 마킹</span></div>
-      <div class="note" style="margin-top:6px;">시험지 표시 ${done}문항 · 남은 시간 ${mockFmtClock(mockLeftMs(run.ms))} · 시험지를 열면 시간이 다시 가요</div>
+      <div class="mock-hero-score"><b>${mockOmrCount(run)}</b><span> / ${mockRunN(run)} OMR 마킹</span></div>
+      <div class="note" style="margin-top:6px;">시험지 표시 ${done}문항 · 남은 시간 ${mockFmtClock(mockLeftMs(run.ms, run))} · 시험지를 열면 시간이 다시 가요</div>
       <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="go('mockExam')">이어서 풀기</button>`;
   } else {
     card = `
       <div class="mock-hero-label">${todayStr().replace(/-/g,'.')} 실력 점검</div>
-      <div class="mock-hero-score"><b>${MOCK_N}</b><span> 문항 · 30분</span></div>
+      <div class="mock-hero-score"><b>${sz.n}</b><span> 문항 · ${sz.min}분</span></div>
       <div class="note" style="margin-top:8px;">전 범위 · 사상가는 겹치지 않게 뽑아요</div>
-      <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="startMock()">시험 시작</button>`;
+      <div class="mock-size" role="group" aria-label="시험지 크기">
+        ${MOCK_SIZES.map(o=>`<button class="mock-size-b ${o.n === sz.n ? 'on' : ''}"
+          onclick="setMockSize(${o.n})" aria-pressed="${o.n === sz.n}">
+          <b>${o.n}문항</b><span>${o.min}분</span></button>`).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="startMock()">시험 시작</button>`;
   }
 
   return `<div class="screen">
@@ -1161,10 +1167,10 @@ function renderMockSetup(){
         답이 둘이 되는 일이 없어요. 출제 가능한 사상가는 지금 ${pool.usable.length}명입니다.
       </div>
       <div class="note" style="margin-top:7px;">
-        같은 날에는 몇 번을 들어와도 같은 20문항이 나옵니다. 채점은 다 풀고 한 번에 합니다.
+        같은 날·같은 크기라면 몇 번을 들어와도 같은 ${sz.n}문항이 나옵니다. 채점은 다 풀고 한 번에 합니다.
       </div>
       <div class="note" style="margin-top:7px;">
-        <b>제한 시간 30분.</b> 시험지를 누르면 연필 표시가 되고, <b>채점은 OMR 답안지로</b> 합니다.
+        <b>제한 시간 ${sz.min}분.</b> 시험지를 누르면 연필 표시가 되고, <b>채점은 OMR 답안지로</b> 합니다.
         오른쪽 <b>OMR</b> 탭을 눌러 답안지를 꺼내 옮겨 적고, 다시 누르면 들어가요.
         시간이 끝나면 그때까지 마킹한 OMR로 바로 채점돼요.
       </div>
@@ -1205,7 +1211,7 @@ function renderOmrPanel(set, run){
         <div class="omr-title">답안지</div>
         <div class="omr-sub">윤리와 사상 · <b data-omr-count>${n}</b>/${set.length}</div>
       </div>
-      <span id="omrClock" class="omr-clock">${mockFmtClock(mockLeftMs(mockLiveMs(run)))}</span>
+      <span id="omrClock" class="omr-clock">${mockFmtClock(mockLeftMs(mockLiveMs(run), run))}</span>
       <button class="omr-close" onclick="toggleOmr(false)" aria-label="답안지 넣기">넣기</button>
     </div>
     <div class="omr-grid" role="group" aria-label="문항별 마킹">
@@ -1233,7 +1239,7 @@ function renderMockExam(){
   if(run.submitted) return renderMockResult();
   const done = mockAnsweredCount();
   const live = mockLiveMs(run);
-  const left = mockLeftMs(live);
+  const left = mockLeftMs(live, run);
 
   return `<div class="screen">
     <div class="mock-bar">

@@ -31,11 +31,11 @@ global.markDailyActivity = function(){};
 
 // app.js 에서 모의고사 부분만 떼어 전역에서 실행한다
 const appSrc = fs.readFileSync(path.join(APP,'app.js'),'utf8');
-const start = appSrc.indexOf('const MOCK_N');
+const start = appSrc.indexOf('const MOCK_SIZES');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_SIZES|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -48,6 +48,8 @@ OX_ITEMS.concat(CMP_ITEMS).forEach(o=>{ oxById[o.id] = o; });
 
 const pool = mockPool();
 ok(pool.usable.length >= MOCK_N, '출제 가능 사상가 ' + pool.usable.length + '명 (최소 ' + MOCK_N + ')');
+// 시험지 크기마다 같은 검사를 돌린다 — 5 · 10 · 20문항
+const SIZES = MOCK_SIZES.map(o=> o.n);
 
 // 삼중 판정 색인 — 조합별로 {문장: {사람: O/X}}
 const ZONE_PAT = {
@@ -96,10 +98,15 @@ function trioSet(who){
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
 let trioVennQ = 0, critQ = 0;
 const algoHist = {}, vennHist = {};
-for(let d=1; d<=40; d++){
+for(let d=1; d<=40 * SIZES.length; d++){
+  const size = SIZES[(d - 1) % SIZES.length];
+  STATE.quiz.size = size;
+  MOCK_CACHE = null;
   TODAY = '2026-' + String((d % 12) + 1).padStart(2,'0') + '-' + String((d % 28) + 1).padStart(2,'0');
+  const N = mockSetN();
+  const quota = mockQuotaOf();
   const set = buildMockSet();
-  ok(set.length === MOCK_N, TODAY + ' 문항 수 ' + set.length);
+  ok(set.length === N, TODAY + ' (' + N + '문항) 문항 수 ' + set.length);
   const names = [];
   set.forEach(q=>{
     if(q.type === 'trio') names.push.apply(names, q.who);
@@ -126,10 +133,10 @@ for(let d=1; d<=40; d++){
   const nAlgo = set.filter(q=> q.type === 'algo').length;
   const nVenn = set.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length;
   // 개수는 고정하지 않는다. 다만 둘 다 한 문항 이상, 상한을 넘지 않아야 한다
-  ok(nAlgo >= MOCK_QUOTA.algo[0] && nAlgo <= MOCK_QUOTA.algo[1],
-     TODAY + ' 순서도가 ' + nAlgo + '문항 (' + MOCK_QUOTA.algo.join('~') + '문항이어야 한다)');
-  ok(nVenn >= MOCK_QUOTA.anyVenn[0] && nVenn <= MOCK_QUOTA.anyVenn[1],
-     TODAY + ' 벤다이어그램이 ' + nVenn + '문항 (' + MOCK_QUOTA.anyVenn.join('~') + '문항이어야 한다)');
+  ok(nAlgo >= quota.algo[0] && nAlgo <= quota.algo[1],
+     TODAY + ' (' + N + '문항) 순서도가 ' + nAlgo + '문항 (' + quota.algo.join('~') + '이어야 한다)');
+  ok(nVenn >= quota.anyVenn[0] && nVenn <= quota.anyVenn[1],
+     TODAY + ' (' + N + '문항) 벤다이어그램이 ' + nVenn + '문항 (' + quota.anyVenn.join('~') + '이어야 한다)');
   algoHist[nAlgo] = (algoHist[nAlgo] || 0) + 1;
   vennHist[nVenn] = (vennHist[nVenn] || 0) + 1;
   set.forEach((q,qi)=>{
