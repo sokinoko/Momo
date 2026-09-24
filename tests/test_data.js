@@ -135,8 +135,9 @@ function splitDiff(t){
   }
   return null;
 }
-// 아직 확인하지 못한 기출 충돌. 형석이 「빠른 정답」을 다시 보고 알려 주면 지운다
-const KNOWN = { 'ox-yih-51':'2021 수특 no.51 — 이이 판정이 ox-yih-52·ox-pf1-55·ox-yiy-41 과 어긋난다' };
+// 아직 확인하지 못한 기출 충돌을 적어 두는 자리. 지금은 비어 있다 —
+// 새 충돌이 생기면 그대로 실패로 떨어진다
+const KNOWN = {};
 {
   const idx = {};
   const put = (body, name, id, ans)=>{
