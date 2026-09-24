@@ -15,6 +15,10 @@
 python3 build.py                 # ethics_note.html (커밋하지 않음)
 for t in tests/test_*.js; do node "$t" | tail -1; done
 ```
+테스트는 셋이다 — `test_mock.js`(출제기) · `test_trio_venn.js`(3중 벤 재료) ·
+`test_data.js`(데이터). `test_data.js`는 한 사람에게 같은 문장이 O와 X로 동시에
+매겨져 있는지도 본다. 그런 문장은 3중 벤·비판에서 통째로 버려지므로 조용히 재료가 준다.
+아직 확인하지 못한 기출 충돌은 그 안의 `KNOWN`에 적어 두고 경고로만 띄운다.
 변경 후에는 **반드시 테스트와 빌드를 둘 다 통과**시키고 푸시한다.
 화면을 바꿨다면 가능하면 Playwright로 390×844 스크린샷을 찍어 확인한다.
 
