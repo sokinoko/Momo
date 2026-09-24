@@ -997,20 +997,11 @@ function mockCritiqueFig(){
     <circle cx="226" cy="160" r="34" fill="none" stroke="currentColor"/>
     <text x="226" y="165" text-anchor="middle" font-size="12.5" fill="currentColor">병</text>
 
-    <line x1="126" y1="72" x2="92" y2="128" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="100" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">A</text>
-    <line x1="106" y1="132" x2="140" y2="78" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="134" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">B</text>
-
-    <line x1="196" y1="150" x2="112" y2="150" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="154" y="143" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">C</text>
-    <line x1="104" y1="172" x2="188" y2="172" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="154" y="190" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">D</text>
-
-    <line x1="208" y1="132" x2="172" y2="76" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="204" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">E</text>
-    <line x1="174" y1="72" x2="210" y2="128" stroke="currentColor" marker-end="url(#ah${id})"/>
-    <text x="170" y="112" text-anchor="middle" font-size="12" font-weight="700" fill="currentColor">F</text>
+    ${mockCritArrowLines().map(L=>`
+      <line x1="${L.x1.toFixed(1)}" y1="${L.y1.toFixed(1)}" x2="${L.x2.toFixed(1)}" y2="${L.y2.toFixed(1)}"
+            stroke="currentColor" marker-end="url(#ah${id})"/>
+      <text x="${L.lx.toFixed(1)}" y="${L.ly.toFixed(1)}" text-anchor="middle" font-size="12"
+            font-weight="700" fill="currentColor">${L.k}</text>`).join('')}
 
     <rect x="306" y="18" width="182" height="56" fill="none" stroke="currentColor"/>
     <text x="397" y="14" text-anchor="middle" font-size="10.5" fill="currentColor">〈범례〉</text>
@@ -1406,8 +1397,10 @@ function renderMockReview(q, i, run){
           <span class="tx"><b class="mock-lb">${it.zone?it.zone:it.label} :</b> ${escHtml(it.body)}
             <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
             ${mockSrcNote(it)}
             ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
+            ${it.verdict?`<div class="mock-rv-verdict ${it.ok?'t':'f'}">${escHtml(it.verdict)}</div>`:''}
           </span>
         </div>`).join('')}
       </div>
@@ -1427,7 +1420,9 @@ function renderMockReview(q, i, run){
         let notes = '';
         if(open){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;
-          if(c.note) notes += `<div class="mock-rv-note">${statementTrue?'함께 알아둘 것':'왜 틀렸나'} — ${escHtml(c.note)}</div>`;
+          // 비판 문항의 해설은 그 자체로 완결된 설명이라 앞머리를 붙이지 않는다
+          const head = (q.type === 'critique') ? '' : ((statementTrue ? '함께 알아둘 것' : '왜 틀렸나') + ' — ');
+          if(c.note) notes += `<div class="mock-rv-note">${head}${escHtml(c.note)}</div>`;
           if(!statementTrue && c.fix) notes += `<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(c.fix)}</div>`;
           notes += mockSrcNote(c);
         }

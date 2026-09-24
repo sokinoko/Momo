@@ -1199,6 +1199,14 @@ mark.ps-clue{
   padding-left:8px;
 }
 
+/* 벤다이어그램 보기의 결론 한 줄 — 왜 O·X 인지 읽은 뒤 맨 마지막에 온다 */
+.mock-rv-verdict{
+  margin-top:6px; padding:7px 9px; border-radius:4px; border-left:3px solid var(--rule-strong);
+  font-size:12px; line-height:1.6; font-weight:600;
+}
+.mock-rv-verdict.t{ border-left-color:#2E6B4F; background:rgba(46,107,79,.07); color:#2E6B4F; }
+.mock-rv-verdict.f{ border-left-color:var(--red); background:rgba(155,42,42,.06); color:var(--red); }
+
 /* 시험지 크기 고르기 — 5 · 10 · 20문항 */
 .mock-size{ display:flex; gap:7px; margin-top:13px; }
 .mock-size-b{

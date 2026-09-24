@@ -1368,7 +1368,25 @@ function buildVennQ(a, b, unit, rng, pairTopic){
     }
     if(!pick) return null;
     seenBody[pick.body] = 1;
-    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue }));
+    // 이 문장이 정말 어느 영역인지 → 결론은 맨 뒤에 낸다
+    const ZL = { A:'갑만의 입장', B:'갑과 을의 공통 입장', C:'을만의 입장' };
+    let real, why;
+    if(z === 'B'){
+      real = isTrue ? 'B' : null;
+      why = isTrue
+        ? (mockJo(a, '과', '와') + ' ' + mockJo(b, '이', '가') + ' 둘 다 이 문장을 받아들인다.')
+        : (mockJo(a, '은', '는') + ' 이 문장을 받아들이지 않는다. 한쪽이라도 부정하면 공통 입장이 될 수 없다.');
+    } else {
+      const mine = (z === 'A') === isTrue;          // 갑만의 입장인가
+      real = mine ? 'A' : 'C';
+      why = mockJo(mine ? a : b, '은', '는') + ' 이 문장을 받아들이고 '
+          + mockJo(mine ? b : a, '은', '는') + ' 받아들이지 않는다.';
+    }
+    const place = real ? ('「' + ZL[real] + '」에 들어간다') : '어느 영역에도 들어가지 않는다';
+    const verdict = why + ' 그러므로 이 문장은 ' + place + '. '
+                  + MOCK_BOX_MARK[i] + ' 자리는 「' + ZL[z] + '」이므로 '
+                  + (isTrue ? '제자리다.' : '자리가 틀렸다.');
+    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue, verdict:verdict }));
   }
   const psA = shuffleSeeded(A.ps, rng)[0];
   const psB = shuffleSeeded(B.ps, rng)[0];
@@ -1589,14 +1607,24 @@ function buildTrioVennQ(a, b, c, unit, rng, pairTopic){
     if(!pick) return null;
     used[pick.body] = 1;
     const real = MOCK_TRIO_ZONES.filter(x=> x.k === mockTrioPat(pick, a, b, c))[0];
-    const say = (w)=> [a,b,c].map((n,ix)=> n + ' ' + pick.ans[n]).join(' · ');
+    // 세 사람이 왜 받아들이고 왜 받아들이지 않는지를 먼저 적고, 어느 영역인지는 맨 뒤에 낸다
+    const lab = ['갑','을','병'];
+    const notes = [a,b,c].map((n, ix)=>{
+      const it = mockItemById(pick.id[n]);
+      const yes = pick.ans[n] === 'O';
+      return lab[ix] + ' ' + mockJo(n, '은', '는') + ' 이 문장을 '
+           + (yes ? '받아들인다' : '받아들이지 않는다')
+           + ((it && it.note) ? (' — ' + it.note) : '.');
+    });
+    const pat = [a,b,c].map((n, ix)=> lab[ix] + ' ' + pick.ans[n]).join(' · ');
+    const place = real ? ('「' + real.lab() + '」에 들어간다') : '어느 영역에도 들어가지 않는다';
+    const verdict = pat + ' 이므로 이 문장은 ' + place + '. '
+                  + letters[i] + ' 자리는 「' + z.lab() + '」이므로 '
+                  + (isTrue ? '제자리다.' : '자리가 틀렸다.');
     items.push({ id:pick.id[a] || pick.id[b] || pick.id[c], body:pick.body,
                  zone:letters[i], zoneLab:z.lab(), mark:MOCK_BOX_MARK[i], ok:isTrue,
-                 note: (isTrue ? '제자리다. ' : '자리가 틀렸다. ')
-                   + '갑 ' + a + ' ' + pick.ans[a] + ' · 을 ' + b + ' ' + pick.ans[b]
-                   + ' · 병 ' + c + ' ' + pick.ans[c] + ' 이므로 '
-                   + (real ? real.lab() : '어느 영역에도 들어가지 않는다') + '.',
-                 src:'자체 제작' });
+                 notes:notes, verdict:verdict,
+                 src:(mockItemById(pick.id[a] || pick.id[b] || pick.id[c]) || {}).source || null });
   }
   const ps = [a,b,c].map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
   return { type:'trioVenn', who:[a,b,c], unit:unit, pairTopic:pairTopic||null,
@@ -1612,6 +1640,29 @@ const MOCK_CRIT_ARROWS = [
   { k:'C', from:1, to:2 }, { k:'D', from:2, to:1 },
   { k:'E', from:2, to:0 }, { k:'F', from:0, to:2 },
 ];
+/* 비판 그림의 화살표 여섯 개를 MOCK_CRIT_ARROWS 에서 바로 계산한다.
+   손으로 좌표를 적어 두면 데이터와 어긋나도 아무도 모른다 — 실제로 C·D 가 뒤집혀 있었고
+   E·F 는 두 선이 3.8px 밖에 안 떨어져 어느 화살촉이 어느 라벨인지 알 수 없었다.
+   같은 쌍의 두 방향은 진행 방향의 왼쪽 법선으로 서로 반대쪽에 밀어 놓는다. */
+const MOCK_CRIT_POS = [ { x:150, y:46 }, { x:74, y:160 }, { x:226, y:160 } ];  // 갑 을 병
+const MOCK_CRIT_R = 34;
+function mockCritArrowLines(){
+  const GAP = 5, OFF = 7, LAB = 13;
+  return MOCK_CRIT_ARROWS.map(ar=>{
+    const p = MOCK_CRIT_POS[ar.from], q = MOCK_CRIT_POS[ar.to];
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const nx = -uy, ny = ux;                       // 진행 방향의 왼쪽
+    const s = MOCK_CRIT_R + GAP, e = MOCK_CRIT_R + GAP + 3;
+    const x1 = p.x + ux*s + nx*OFF, y1 = p.y + uy*s + ny*OFF;
+    const x2 = q.x - ux*e + nx*OFF, y2 = q.y - uy*e + ny*OFF;
+    return { k:ar.k, from:ar.from, to:ar.to,
+             x1:x1, y1:y1, x2:x2, y2:y2,
+             lx:(x1+x2)/2 + nx*LAB, ly:(y1+y2)/2 + ny*LAB + 4 };
+  });
+}
+
 function buildCritiqueQ(a, b, c, unit, rng, pairTopic){
   const set = mockTrioOf(a, b, c);
   if(!set) return null;

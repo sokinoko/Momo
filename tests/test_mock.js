@@ -35,7 +35,7 @@ const start = appSrc.indexOf('const MOCK_SIZES');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_SIZES|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -45,6 +45,39 @@ function ok(cond, msg){ if(!cond){ console.error('  ✕ ' + msg); fail++; } }
 const oxById = {};
 // 출제기가 읽는 것과 같은 범위(기출 + 자체 제작 비교 선지)로 인덱스를 만든다
 OX_ITEMS.concat(CMP_ITEMS).forEach(o=>{ oxById[o.id] = o; });
+
+// 비판 그림의 화살표는 MOCK_CRIT_ARROWS 와 글자 그대로 같아야 한다.
+// 화살촉 끝이 to 원에, 시작점이 from 원에 제일 가까운지 · 같은 쌍의 두 선이 겹치지 않는지
+(function(){
+  const near = (x, y)=>{
+    let best = 0, bd = Infinity;
+    MOCK_CRIT_POS.forEach((p, i)=>{
+      const d = Math.hypot(p.x - x, p.y - y);
+      if(d < bd){ bd = d; best = i; }
+    });
+    return best;
+  };
+  const L = mockCritArrowLines();
+  ok(L.length === MOCK_CRIT_ARROWS.length, '비판 화살표 개수');
+  L.forEach(a=>{
+    ok(near(a.x1, a.y1) === a.from, '화살표 ' + a.k + ' 의 시작이 from 원이 아니다');
+    ok(near(a.x2, a.y2) === a.to,   '화살표 ' + a.k + ' 의 화살촉이 to 원이 아니다');
+    ok(near(a.lx, a.ly) !== -1, '');
+  });
+  // 라벨은 제 선에 제일 가까워야 한다 — 짝이 겹치면 어느 화살표인지 알 수 없다
+  const segD = (px, py, s)=>{
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
+    const t = Math.max(0, Math.min(1, ((px - s.x1)*dx + (py - s.y1)*dy) / (dx*dx + dy*dy)));
+    return Math.hypot(px - (s.x1 + t*dx), py - (s.y1 + t*dy));
+  };
+  L.forEach(a=>{
+    const mine = segD(a.lx, a.ly, a);
+    L.forEach(b=>{
+      if(a.k === b.k) return;
+      ok(mine < segD(a.lx, a.ly, b), '라벨 ' + a.k + ' 가 화살표 ' + b.k + ' 에 더 붙어 있다');
+    });
+  });
+})();
 
 const pool = mockPool();
 ok(pool.usable.length >= MOCK_N, '출제 가능 사상가 ' + pool.usable.length + '명 (최소 ' + MOCK_N + ')');
