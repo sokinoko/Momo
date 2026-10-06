@@ -46,9 +46,37 @@ CURLY = '‘’“”'
 NOTE_MIN = 40
 
 
+def aliases():
+    """app.js 의 MOCK_ALIAS — 기출은 「양명은 ~」이라 쓰지만 제시문 이름은 「왕수인」이다."""
+    src = open(APPJS, encoding='utf-8').read()
+    blk = src.split('const MOCK_ALIAS = {', 1)[1].split('};', 1)[0]
+    return dict(re.findall(r"'([^']+)'\s*:\s*'([^']+)'", blk))
+
+
+def cats():
+    """app.js 의 MOCK_CATS — {범주: [구성원…]}. 선지 본문에는 구성원 이름도 쓴다."""
+    src = open(APPJS, encoding='utf-8').read()
+    blk = src.split('const MOCK_CATS = {', 1)[1].split('\n};', 1)[0]
+    out = {}
+    for m in re.finditer(r"'([^']+)'\s*:\s*\[([^\]]*)\]", blk):
+        out[m.group(1)] = re.findall(r"'([^']+)'", m.group(2))
+    return out
+
+
+def canon(n):
+    n = aliases().get(n, n)
+    for c, ms in cats().items():
+        if n == c or n in ms:
+            return c
+    return n
+
+
 def names():
     ps = json.load(open(PASS, encoding='utf-8'))
-    return sorted({p['name'] for p in ps}, key=len, reverse=True)
+    ns = {p['name'] for p in ps} | set(aliases())
+    for c, ms in cats().items():
+        ns |= {c} | set(ms)
+    return sorted(ns, key=len, reverse=True)
 
 
 def known_topics():
@@ -213,7 +241,7 @@ def add(batch, dry=False):
         if src:
             assert src in ps_by_id, '없는 제시문 id: %s (%s)' % (src, rid)
             sp = ps_by_id[src]
-            assert sp['name'] in [x for x in (a, b) if x], \
+            assert canon(sp['name']) in [canon(x) for x in (a, b) if x], \
                 '제시문이 이 사상가와 무관하다: %s ← %s (%s)' % (rid, src, sp['name'])
             assert quote in sp['text'], \
                 '인용이 제시문 본문에 그대로 있지 않다: %s ← %s' % (rid, src)
