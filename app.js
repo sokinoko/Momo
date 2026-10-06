@@ -2437,6 +2437,7 @@ function submitMock(force){
   run.submitted = true;
   run.score = score;
   run.review = Math.max(0, run.ms - (run.mark || 0));
+  weakRecordMock(set, run);          // 사상가별 약점 통계에 쌓는다 (제출은 한 번뿐이라 두 번 세지 않는다)
 
   // 자동 별표 — 이미 별표였던 것은 건드리지 않고, 새로 붙인 것만 기록해 둔다
   const ox = ensureOxState();
@@ -2512,6 +2513,93 @@ function mockHistoryList(){
     return no(y) - no(x);
   }).map(k=>({ date:dateOf(k), setNo:no(k),
                score:h[k].score, total:h[k].total, sec:h[k].sec, mode:h[k].mode || 'free' }));
+}
+
+/* ---------- 사상가별 약점 통계 ----------
+   어느 사상가가 약한지 — 모의고사 · 기출 OX · 제시문 퀴즈를 사상가 기준으로 모은다.
+   · 기출 OX: 선지 하나는 그 선지에 나온 사상가의 것이다. 「A와 B는 모두」·「A는 B와 달리」 선지는 둘 다에 센다.
+     선지 본문에서 사상가를 읽는 규칙은 모의고사 출제와 같다(별칭·범주·밀 분리 포함). 이미 쌓인 rec 로 바로 계산한다.
+   · 제시문 퀴즈: 제시문의 사상가.
+   · 모의고사: 제출할 때 문항마다 정오를 사상가별로 쌓는다(STATE.quiz.who = {이름:{n:푼 수, w:틀린 수}}).
+     갑·을·병 문항은 나온 사람 전부에게 센다. 답을 안 한 문항은 센 적 없는 것으로 둔다(시간이 모자라 못 푼 걸 몰라서 틀린 것으로 보지 않는다). */
+let WEAK_OX_IDX = null, WEAK_PS_IDX = null;
+function weakOxIndex(){
+  if(WEAK_OX_IDX) return WEAK_OX_IDX;
+  const names = mockNameList();
+  const idx = {};
+  OX_ITEMS.concat((typeof CMP_ITEMS !== 'undefined' && CMP_ITEMS) ? CMP_ITEMS : []).forEach(it=>{
+    const pr = mockSplitPair(it.text, names, it.topics);
+    if(pr){ idx[it.id] = [pr.a, pr.b]; return; }
+    const df = mockSplitDiff(it.text, names, it.topics);
+    if(df){ idx[it.id] = [df.a, df.b]; return; }
+    const sp = mockSplit(it.text, names, it.topics);
+    if(sp) idx[it.id] = [sp.name];
+  });
+  WEAK_OX_IDX = idx;
+  return idx;
+}
+function weakPsIndex(){
+  if(WEAK_PS_IDX) return WEAK_PS_IDX;
+  const idx = {};
+  PASSAGES.forEach(p=>{ idx[p.id] = mockCanon(p.name, [p.topic]); });
+  WEAK_PS_IDX = idx;
+  return idx;
+}
+// 문항에 나온 사상가들 (본이름·범주 이름)
+function mockQNames(q){
+  const out = [];
+  const add = n=>{ if(n && out.indexOf(n) < 0) out.push(n); };
+  add(q.name); add(q.a); add(q.b);
+  (q.who || []).forEach(add);
+  return out;
+}
+// 제출 때 한 번만 부른다
+function weakRecordMock(set, run){
+  const w = STATE.quiz.who = STATE.quiz.who || {};
+  set.forEach((q, i)=>{
+    const a = mockAns(run, i);
+    if(a === null) return;
+    const right = (a === q.ans);
+    mockQNames(q).forEach(n=>{
+      const r = w[n] || (w[n] = { n:0, w:0 });
+      r.n++;
+      if(!right) r.w++;
+    });
+  });
+}
+const WEAK_SRC = [['all', '전체'], ['mock', '모의고사'], ['ox', '기출 OX'], ['ps', '제시문']];
+const WEAK_MIN = { all:5, mock:2, ox:5, ps:3 };      // 이만큼은 풀어야 순위에 오른다 — 한 번 나와 틀린 사람이 1위가 되지 않게
+function weakRows(src){
+  const acc = {};
+  const add = (name, n, w)=>{
+    if(!name || !n) return;
+    const a = acc[name] || (acc[name] = { n:0, w:0 });
+    a.n += n; a.w += w;
+  };
+  if(src === 'all' || src === 'mock'){
+    const who = (STATE.quiz && STATE.quiz.who) || {};
+    Object.keys(who).forEach(k=> add(k, who[k].n, who[k].w));
+  }
+  if(src === 'all' || src === 'ox'){
+    const rec = (STATE.ox && STATE.ox.rec) || {}, idx = weakOxIndex();
+    Object.keys(rec).forEach(id=>{
+      (idx[id] || []).forEach(n=> add(n, rec[id].seen || 0, rec[id].wrong || 0));
+    });
+  }
+  if(src === 'all' || src === 'ps'){
+    const rec = (STATE.ps && STATE.ps.rec) || {}, idx = weakPsIndex();
+    Object.keys(rec).forEach(id=>{
+      if(idx[id]) add(idx[id], rec[id].seen || 0, rec[id].wrong || 0);
+    });
+  }
+  const min = WEAK_MIN[src] || 5;
+  return Object.keys(acc).map(n=>({ name:n, n:acc[n].n, w:acc[n].w, rate:acc[n].w / acc[n].n }))
+    .filter(r=> r.n >= min)
+    .sort((a, b)=> (b.rate - a.rate) || (b.w - a.w) || (b.n - a.n) || (a.name < b.name ? -1 : 1));
+}
+function setWeakSrc(src){
+  NAV.weakSrc = src;
+  mockRerender();
 }
 
 /* ---------- 학습 기록 백업 · 복원 ---------- */

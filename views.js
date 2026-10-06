@@ -2339,6 +2339,31 @@ function renderAppendixDetail(id){
 
 
 /* ---------- 통계 ---------- */
+/* 약한 사상가 — 통계 탭. 출처(전체·모의고사·기출 OX·제시문)를 바꿔 가며 본다 */
+function renderWeakBoard(){
+  const src = (NAV.weakSrc && WEAK_MIN[NAV.weakSrc]) ? NAV.weakSrc : 'all';
+  const rows = weakRows(src);
+  const top = rows.slice(0, 12);
+  const chips = WEAK_SRC.map(o=>`<button class="weak-chip ${o[0] === src ? 'on' : ''}"
+    onclick="setWeakSrc('${o[0]}')" aria-pressed="${o[0] === src}">${o[1]}</button>`).join('');
+  const list = top.length ? top.map((r, i)=>{
+    const pct = Math.round(r.rate * 100);
+    return `<div class="weak-row">
+      <span class="weak-no">${i + 1}</span>
+      <span class="weak-name">${escHtml(r.name)}</span>
+      <span class="weak-bar"><i class="${pct >= 50 ? 'hot' : ''}" style="width:${Math.max(4, pct)}%"></i></span>
+      <span class="weak-num"><b>${pct}%</b> <small>${r.w}/${r.n}</small></span>
+    </div>`;
+  }).join('') : `<div class="note" style="padding:6px 0;">아직 기록이 모자라요. 사상가마다 ${WEAK_MIN[src]}번 이상 풀어야 순위에 올라요.</div>`;
+  return `<div class="section-title">약한 사상가</div>
+    <div class="hard-box" style="padding:15px;">
+      <div class="weak-chips" role="group" aria-label="집계 범위">${chips}</div>
+      ${list}
+      <div class="note" style="margin-top:10px;">틀린 횟수 ÷ 푼 횟수 순서예요. 갑·을 비교 문제는 나온 사람 모두에게 세고,
+        모의고사에서 답을 안 한 문항은 빼요. 모의고사 기록은 이 기능이 생긴 뒤부터 쌓여요.</div>
+    </div>`;
+}
+
 function renderStats(){
   const prog = overallProgress();
   const today = todayStr();
@@ -2386,6 +2411,8 @@ function renderStats(){
         <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="go('psSetup')">제시문 풀러 가기 →</button>
       </div>`;
     })()}
+
+    ${renderWeakBoard()}
 
     <div class="section-title">단원별 진도</div>
     ${UNIT_ORDER.map(u=>{

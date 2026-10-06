@@ -1239,6 +1239,24 @@ mark.ps-clue{
 .mock-chip.dim{ opacity:.4; }
 .btn[disabled]{ opacity:.45; cursor:default; }
 
+
+/* 약한 사상가 */
+.weak-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+.weak-chip{
+  padding:5px 11px; border:1px solid var(--rule); border-radius:999px; background:transparent;
+  color:var(--ink-soft, #4a453d); cursor:pointer; font-family:var(--font-note); font-size:12.5px;
+}
+.weak-chip.on{ border-color:var(--red); color:var(--red); background:var(--gold-tint); font-weight:700; }
+.weak-row{ display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--rule); }
+.weak-row:first-of-type{ border-top:none; }
+.weak-no{ width:16px; text-align:right; font-size:11px; color:var(--ink-faint); }
+.weak-name{ width:84px; font-size:13.5px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.weak-bar{ flex:1; height:8px; background:var(--gold-tint); border-radius:4px; overflow:hidden; }
+.weak-bar i{ display:block; height:100%; background:var(--ink-faint); border-radius:4px; }
+.weak-bar i.hot{ background:var(--red); }
+.weak-num{ width:78px; text-align:right; font-size:13px; }
+.weak-num small{ color:var(--ink-faint); font-size:11px; }
+
 /* 세트에 나온 자체 제작 선지 모아보기. 맞고 틀림과 상관없이 해설이 붙는다 */
 .mock-minebox{ padding:4px 14px 13px; margin-top:12px; }
 .mock-mine-row{ padding-top:12px; }

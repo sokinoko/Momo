@@ -76,6 +76,10 @@ for t in tests/test_*.js; do node "$t" | tail -1; done
   원불교(박중빈) · 증산교(강일순) · 급진개화파(박영효·김옥균). **급진개화파는 제시문이 없어 출제 풀에서 빠진다**
   (제시문이 생기면 `tests/test_modes.js`의 급진개화파 줄을 지운다). 밀은 `MOCK_SPLIT_BY_TOPIC`으로
   state-role 선지·제시문만 자유주의로 보낸다. 범주 구성원 이름은 `cmp_add.py`가 `MOCK_CATS`에서 읽어 쓴다.
+- **약한 사상가 통계**(통계 탭 · `weakRows` · `renderWeakBoard`). 기출 OX는 선지 본문을 `mockSplit*`로 읽어
+  사상가별로 모으고(`weakOxIndex`, 별칭·범주·밀 분리가 그대로 따라온다), 제시문은 제시문의 사상가,
+  모의고사는 제출 때 `weakRecordMock`이 `STATE.quiz.who`에 쌓는다. 갑·을 문항은 나온 사람 전부에게 세고
+  답을 안 한 문항은 뺀다. 순위는 최소 횟수(`WEAK_MIN`) 이상 푼 사람만. 모의고사 기록은 이 기능 이후부터다.
 - **시험지 구성**: 개수를 고정하지 않는다. `buildMockQuota`가 세트마다 `MOCK_QUOTA`
   범위 안에서 뽑는다. 크기마다 범위가 다르다 — 20문항이면 순서도 2~3·벤 1~2,
   10문항이면 1~2·1, 5문항이면 0~1·0~1.
