@@ -660,10 +660,52 @@ const MOCK_SIZES = [
 const MOCK_N = 20;                                   // 온전한 한 세트
 function mockSizeOf(n){
   for(let i=0;i<MOCK_SIZES.length;i++){ if(MOCK_SIZES[i].n === n) return MOCK_SIZES[i]; }
+  // 테마별은 학자 수 × 5문항이라 15문항도 있다
+  if(typeof n === 'number' && n > 0 && n < MOCK_N && n % 5 === 0)
+    return { n:n, min:Math.floor(n * 1.5), label:'테마', quota:{ algo:[0,1], anyVenn:[0,1] } };
   return MOCK_SIZES[MOCK_SIZES.length - 1];
 }
+/* 출제 방식 셋 — free(자유: 5·10·20) · theme(테마별: 학자 최대 4명 × 5문항) · formal(정형화: 20문항 고정).
+   고른 방식은 STATE.quiz.mode, 테마 학자는 STATE.quiz.theme. 옛 기록은 mode 가 없어 free 다. */
+const MOCK_THEME_EACH = 5, MOCK_THEME_MAX = 4;
+function mockMode(){
+  const m = STATE.quiz && STATE.quiz.mode;
+  return (m === 'theme' || m === 'formal') ? m : 'free';
+}
+// 한 학자로 다섯 문항을 겹치는 선지 없이 만들려면 선지가 넉넉해야 한다 (옳은 것 12 · 틀린 것 8 이상)
+function mockThemeOk(n){
+  const b = mockPool().byName[n];
+  return !!b && b.ps.length >= 1 && b.O.length >= 12 && b.X.length >= 8;
+}
+function mockThemeNames(){
+  return ((STATE.quiz && STATE.quiz.theme) || []).filter(mockThemeOk).slice(0, MOCK_THEME_MAX);
+}
+// 테마 학자 고르기 목록 — 단원 순서(동양 → 서양 → 이데올로기)로
+const MOCK_THEME_UNITS = ['유교', '불교', '도가', '근대', '서양', '이데올로기'];
+function mockThemeCandidates(){
+  const pool = mockPool();
+  return pool.usable.filter(mockThemeOk).map(n=>({ n:n, u:mockMainUnit(n) }))
+    .sort((a, b)=> (MOCK_THEME_UNITS.indexOf(a.u) - MOCK_THEME_UNITS.indexOf(b.u)) || (a.n < b.n ? -1 : 1));
+}
 // 지금 고른 크기. 아무것도 안 골랐으면 온전한 한 세트다(옛 기록도 여기로 들어온다)
-function mockSetN(){ return mockSizeOf(STATE.quiz && STATE.quiz.size).n; }
+function mockSetN(){
+  const m = mockMode();
+  if(m === 'formal') return MOCK_N;
+  if(m === 'theme') return Math.max(1, mockThemeNames().length) * MOCK_THEME_EACH;
+  return mockSizeOf(STATE.quiz && STATE.quiz.size).n;
+}
+// 시험지 이름표 — 같은 날·같은 세트 번호라도 방식이 다르면 다른 시험지다
+function mockSigNow(){
+  const m = mockMode();
+  return m + (m === 'theme' ? ':' + mockThemeNames().join(',') : '');
+}
+function mockRunSig(run){
+  const m = run.mode || 'free';
+  return m + (m === 'theme' ? ':' + (run.names || []).join(',') : '');
+}
+function mockKeySuffix(n, m){
+  return ((n === MOCK_N && m !== 'theme') ? '' : '/' + n) + (m === 'formal' ? '~f' : (m === 'theme' ? '~t' : ''));
+}
 // 채점·시계는 그 시험지가 만들어질 때의 크기를 따른다
 function mockRunN(run){ return (run && run.n) || MOCK_N; }
 function mockRunLimit(run){ return ((run && run.limit) || mockSizeOf(mockRunN(run)).min) * 60000; }
@@ -679,14 +721,50 @@ const MOCK_MIX = { right:0.26, wrong:0.18, box:0.15, venn:0.05, algo:0.05, trio:
 
 let MOCK_CACHE = null;
 
+/* 이름 별칭 · 범주.
+   기출 선지는 「양명은 ~」이라 쓰는데 제시문 이름은 「왕수인」이다. 별칭을 이름 목록에 넣고
+   파싱한 뒤 본이름으로 돌려 놓는다(안 그러면 양명 선지 77개가 통째로 버려진다).
+   범주는 사상을 공유해 서로 비교할 까닭이 없는 사람들을 하나로 본다 — 선지·제시문을 함께 쓰고,
+   한 세트에는 범주 안의 한 사람(범주 이름)만 나온다. */
+const MOCK_ALIAS = { '양명':'왕수인' };
+const MOCK_CATS = {
+  '스토아학파':['아우렐리우스','에픽테토스'],
+  '공화주의':['페팃','비롤리'],
+  '자유주의':['벌린'],
+  // 근대 한국 사상 — 제시문 이름(이항로·신기선·…)과 기출 선지의 이름(위정척사 사상·동학사상·…)이 제각각이다
+  '위정척사':['이항로','위정척사 사상'],
+  '온건개화파':['신기선','동도서기론','동도서기파','동도서기'],
+  '동학':['최제우','최시형','동학사상','동학 사상','해월','수운'],
+  '원불교':['박중빈','소태산'],
+  '증산교':['증산교(강일순)','증산 사상','강일순'],
+  // 급진개화파는 제시문이 아직 없어 출제는 못 한다 (박영효 선지 3개만 있음) — 제시문이 생기면 바로 나온다
+  '급진개화파':['박영효','김옥균']
+};
+/* 같은 이름이 두 사상에 걸친 사람. 밀은 공리주의자이면서 자유주의자다 — 주제가 국가의 역할(state-role)인
+   선지·제시문은 「자유주의」(범주)로, 나머지는 「밀」(공리주의)로 가른다. 한 시험지에 둘이 따로 나올 수 있고
+   선지와 제시문은 절대 섞이지 않는다. (밀의 자유주의 선지는 utilitarianism 태그가 같이 붙어 있어도 state-role 이 우선) */
+const MOCK_SPLIT_BY_TOPIC = { '밀': { topic:'state-role', to:'자유주의' } };
+let MOCK_CAT_OF = null;
+function mockCanon(n, topics){
+  if(!MOCK_CAT_OF){
+    MOCK_CAT_OF = {};
+    Object.keys(MOCK_CATS).forEach(c=> MOCK_CATS[c].forEach(m=>{ MOCK_CAT_OF[m] = c; }));
+  }
+  if(MOCK_ALIAS[n]) n = MOCK_ALIAS[n];
+  const sp = MOCK_SPLIT_BY_TOPIC[n];
+  if(sp && topics && topics.indexOf(sp.topic) >= 0) return sp.to;
+  return MOCK_CAT_OF[n] || n;
+}
 function mockNameList(){
   const seen = {};
   PASSAGES.forEach(p=>{ seen[p.name] = true; });
+  Object.keys(MOCK_ALIAS).forEach(a=>{ seen[a] = true; });
+  Object.keys(MOCK_CATS).forEach(c=>{ seen[c] = true; MOCK_CATS[c].forEach(m=>{ seen[m] = true; }); });
   return Object.keys(seen).sort((a,b)=>b.length - a.length);
 }
 
 // "칸트는 ~라고 본다." → { name:'칸트', body:'~라고 본다.' }
-function mockSplit(text, names){
+function mockSplit(text, names, topics){
   for(let i=0;i<names.length;i++){
     const n = names[i];
     if(text.indexOf(n) !== 0) continue;
@@ -698,15 +776,15 @@ function mockSplit(text, names){
     else return null;
     if(rest.length < 8) return null;
     for(let j=0;j<names.length;j++){
-      if(names[j] !== n && rest.indexOf(names[j]) >= 0) return null;
+      if(names[j] !== n && mockCanon(names[j]) !== mockCanon(n) && rest.indexOf(names[j]) >= 0) return null;
     }
-    return { name:n, body:rest };
+    return { name:mockCanon(n, topics), body:rest };
   }
   return null;
 }
 
 // 「갑과 을」 선지: "A와 B는 모두 ~" → { a, b, body:'모두 ~' }
-function mockSplitPair(text, names){
+function mockSplitPair(text, names, topics){
   for(let i=0;i<names.length;i++){
     const a = names[i];
     if(text.indexOf(a) !== 0) continue;
@@ -722,9 +800,11 @@ function mockSplitPair(text, names){
       r2 = r2.slice(m[0].length);
       if(r2.length < 8) return null;
       for(let k=0;k<names.length;k++){
-        if(names[k] !== a && names[k] !== b && r2.indexOf(names[k]) >= 0) return null;
+        if(names[k] !== a && names[k] !== b && mockCanon(names[k]) !== mockCanon(a) && mockCanon(names[k]) !== mockCanon(b)
+           && r2.indexOf(names[k]) >= 0) return null;
       }
-      return { a:a, b:b, body:r2 };
+      if(mockCanon(a, topics) === mockCanon(b, topics)) return null;      // 같은 범주끼리는 짝이 아니다
+      return { a:mockCanon(a, topics), b:mockCanon(b, topics), body:r2 };
     }
     return null;
   }
@@ -736,7 +816,7 @@ function mockDiffKey(a, b){ return a + '>' + b; }
 
 // 「A는 B와 달리 ~」 형태. O선지라면 A에게는 참, B에게는 거짓이라는 뜻이라
 // 벤다이어그램의 「갑만의 입장」을 안전하게 만들 수 있는 유일한 재료다.
-function mockSplitDiff(text, names){
+function mockSplitDiff(text, names, topics){
   for(let i=0;i<names.length;i++){
     const a = names[i];
     if(text.indexOf(a) !== 0) continue;
@@ -752,9 +832,11 @@ function mockSplitDiff(text, names){
       const body = rest.slice(b.length + m2[0].length);
       if(body.length < 8) return null;
       for(let k=0;k<names.length;k++){
-        if(names[k] !== a && names[k] !== b && body.indexOf(names[k]) >= 0) return null;
+        if(names[k] !== a && names[k] !== b && mockCanon(names[k]) !== mockCanon(a) && mockCanon(names[k]) !== mockCanon(b)
+           && body.indexOf(names[k]) >= 0) return null;
       }
-      return { a:a, b:b, body:body };
+      if(mockCanon(a, topics) === mockCanon(b, topics)) return null;
+      return { a:mockCanon(a, topics), b:mockCanon(b, topics), body:body };
     }
     return null;
   }
@@ -778,13 +860,13 @@ function mockPool(){
     // psid·quote 는 자체 제작 선지가 근거로 삼은 원전(제시문). 채점 해설에서 보여 준다
     const base = { id:it.id, src:it.source||'', fix:it.fix||'', note:it.note||'', plain:it.plain||'',
                    psid:it.psid||'', quote:it.quote||'' };
-    const sp = mockSplit(it.text, names);
+    const sp = mockSplit(it.text, names, it.topics);
     if(sp){
       const b = byName[sp.name] || (byName[sp.name] = {O:[], X:[], ps:[], units:{}, topics:{}});
       b[it.answer === 'X' ? 'X' : 'O'].push(Object.assign({body:sp.body}, base));
       return;
     }
-    const pr = mockSplitPair(it.text, names);
+    const pr = mockSplitPair(it.text, names, it.topics);
     if(pr){
       const k = mockPairKey(pr.a, pr.b);
       const p = pairs[k] || (pairs[k] = {O:[], X:[]});
@@ -792,7 +874,7 @@ function mockPool(){
       p[it.answer === 'X' ? 'X' : 'O'].push(Object.assign({body:pr.body, plainBody:noAll}, base));
       return;
     }
-    const df = mockSplitDiff(it.text, names);
+    const df = mockSplitDiff(it.text, names, it.topics);
     if(df && it.answer === 'O'){
       const k = mockDiffKey(df.a, df.b);
       (diffs[k] || (diffs[k] = [])).push(Object.assign({body:df.body}, base));
@@ -808,17 +890,28 @@ function mockPool(){
     });
   });
 
+  // 범주로 합친 사람은 같은 문장이 O와 X로 엇갈릴 수 있다 — 그런 문장은 양쪽에서 버린다
+  Object.keys(MOCK_CATS).forEach(c=>{
+    const b = byName[c]; if(!b) return;
+    const inO = {}, inX = {};
+    b.O.forEach(x=>{ inO[x.body] = 1; }); b.X.forEach(x=>{ inX[x.body] = 1; });
+    b.O = b.O.filter(x=> !inX[x.body]); b.X = b.X.filter(x=> !inO[x.body]);
+  });
+
   // 단원 표시. 갑·을은 같은 단원끼리 짝지어야 시험지 같다.
   const unitOfTopic = {};
   DATA.forEach(t=>{ unitOfTopic[t.id] = t.unit; });
   PASSAGES.forEach(p=>{
-    const b = byName[p.name];
+    const b = byName[mockCanon(p.name, [p.topic])];
     if(!b) return;
     b.ps.push(p);
     b.topics[p.topic] = (b.topics[p.topic] || 0) + 1;
     const u = unitOfTopic[p.topic];
     if(u) b.units[u] = (b.units[u] || 0) + 1;
   });
+
+  // 제시문이 하나도 없는 이름(급진개화파 등)은 문항을 못 만든다 — 출제 풀에서 뺀다
+  Object.keys(byName).forEach(n=>{ if(!byName[n].ps.length) delete byName[n]; });
 
   const solo = Object.keys(byName).filter(n=>{
     const b = byName[n];
@@ -856,8 +949,9 @@ function mockPool(){
 }
 
 function mockSeedStr(){
-  const n = mockSetN();
-  return todayStr() + '#' + (STATE.quiz.setNo || 0) + (n === MOCK_N ? '' : '/' + n);
+  const n = mockSetN(), m = mockMode();
+  const tag = m === 'theme' ? ':' + mockThemeNames().join(',') : '';
+  return todayStr() + '#' + (STATE.quiz.setNo || 0) + mockKeySuffix(n, m) + tag;
 }
 
 function mockMainUnit(name){
@@ -976,12 +1070,12 @@ function mockSpread(qs, rng){
 const MOCK_MUST = ['칸트', '스피노자'];
 // 고정은 온전한 한 세트에서만 건다. 5·10문항짜리에서는 두 사람이 자리의 절반을
 // 차지해 버리므로 크기가 작으면 고정을 풀고 여느 사상가와 똑같이 뽑는다
-function mockMustList(){ return mockSetN() === MOCK_N ? MOCK_MUST : []; }
+function mockMustList(){ return (mockMode() === 'free' && mockSetN() === MOCK_N) ? MOCK_MUST : []; }
 /* 이 사람은 반드시 단독 문항(옳은 것·옳지 않은 것)으로 낸다.
    한 세트에 같은 사상가가 두 번 나오지 않으므로, 다른 유형의 재료로 한 번 쓰이면
    단독으로 낼 자리가 사라진다. 그래서 쌍·조합을 고르는 모든 자리에서 미리 빼 둔다. */
 const MOCK_MUST_SOLO = ['칸트'];
-function mockSoloOnly(n){ return mockSetN() === MOCK_N && MOCK_MUST_SOLO.indexOf(n) >= 0; }
+function mockSoloOnly(n){ return mockMode() === 'free' && mockSetN() === MOCK_N && MOCK_MUST_SOLO.indexOf(n) >= 0; }
 function mockPairFree(p, used){
   return !used[p[0]] && !used[p[1]] && !mockSoloOnly(p[0]) && !mockSoloOnly(p[1]);
 }
@@ -991,6 +1085,8 @@ function mockMustFirst(order, rng){
 }
 
 function buildMockSet(){
+  if(mockMode() === 'formal') return buildFormalSet();
+  if(mockMode() === 'theme') return buildThemeSet();
   const pool = mockPool();
   const rng = mulberry32(seedFromDate(mockSeedStr()));
   const order = mockMustFirst(shuffleSeeded(pool.usable, rng), rng);
@@ -1494,7 +1590,7 @@ function mockTrioSets(){
   //   「A는 B와 달리 P」 O     → A 는 O, B 는 X
   // 본문이 글자 그대로 같아야 한 문장으로 합쳐진다.
   mockSourceItems().forEach(it=>{
-    const pr = mockSplitPair(it.text, names);
+    const pr = mockSplitPair(it.text, names, it.topics);
     if(pr){
       if(it.answer === 'O'){
         const body = pr.body.replace(/^모두\s*/, '');
@@ -1502,14 +1598,14 @@ function mockTrioSets(){
       }
       return;
     }
-    const df = mockSplitDiff(it.text, names);
+    const df = mockSplitDiff(it.text, names, it.topics);
     if(df){
       if(it.answer === 'O'){
         put(df.body, df.a, 'O', it.id, it.crit); put(df.body, df.b, 'X', it.id, it.crit);
       }
       return;
     }
-    const sp = mockSplit(it.text, names);
+    const sp = mockSplit(it.text, names, it.topics);
     if(sp) put(sp.body, sp.name, it.answer, it.id, it.crit);
   });
   const out = {};
@@ -1757,14 +1853,288 @@ function buildTrioQ(a, b, c, unit, rng, pairTopic){
            psList:ps, choices:choices, ans:choices.indexOf(ansItem) };
 }
 
+/* ===================================================================
+   테마별 · 정형화 출제기
+   자유 출제(buildMockSet)는 한 세트에 같은 사상가가 두 번 나오지 않는다. 테마별은 한 학자가
+   다섯 번 나와야 하므로 구조가 다르다 — 그래서 따로 짠다. 문항 하나는 기존 빌더
+   (buildPairQ · buildBoxQ · buildVennQ · buildAlgoQ · buildTrioQ)를 그대로 부르고,
+   이미 쓴 선지·제시문은 임시 풀에서 빼서 건네 같은 문장이 두 번 나오지 않게 한다.
+   3중 벤·비판은 쓰지 않는다. 같은 날·같은 세트 번호면 같은 문제(씨앗은 mockSeedStr).
+   =================================================================== */
+const MOCK_MIX_PLAIN = { right:0.26, wrong:0.18, pair:0.22, box:0.17, venn:0.06, algo:0.05, trio:0.06 };
+
+// 이미 쓴 id(선지·제시문)를 뺀 임시 풀 — 빌더가 mockPool() 로 읽으므로 그 자리에 잠깐 끼운다
+function mockFilteredPool(names, ex){
+  const base = mockPool();
+  const keep = arr=> arr.filter(c=> !ex[c.id]);
+  const byName = Object.assign({}, base.byName);
+  names.forEach(n=>{
+    const b = base.byName[n]; if(!b) return;
+    const ps = b.ps.filter(p=> !ex[p.id]);
+    byName[n] = Object.assign({}, b, { O:keep(b.O), X:keep(b.X), ps:(ps.length ? ps : b.ps) });
+  });
+  const pairs = Object.assign({}, base.pairs), diffs = Object.assign({}, base.diffs);
+  names.forEach(a=> names.forEach(c=>{
+    if(a === c) return;
+    const k = mockPairKey(a, c), dk = mockDiffKey(a, c);
+    if(pairs[k]) pairs[k] = { O:keep(pairs[k].O), X:keep(pairs[k].X) };
+    if(diffs[dk]) diffs[dk] = keep(diffs[dk]);
+  }));
+  return Object.assign({}, base, { byName:byName, pairs:pairs, diffs:diffs });
+}
+function mockUsing(pool, fn){
+  const save = MOCK_CACHE;
+  MOCK_CACHE = pool;
+  try { return fn(); } finally { MOCK_CACHE = save; }
+}
+// 문항에 들어간 선지·제시문 id 를 다 모은다
+function mockQIds(q, out){
+  if(!q || typeof q !== 'object') return out;
+  if(Array.isArray(q)){ q.forEach(x=> mockQIds(x, out)); return out; }
+  Object.keys(q).forEach(k=>{
+    const v = q[k];
+    if(k === 'id' && typeof v === 'string') out[v] = 1;
+    else if(v && typeof v === 'object') mockQIds(v, out);
+  });
+  return out;
+}
+function mockSoloQ(n, type, rng){
+  const b = mockPool().byName[n];
+  if(!b) return null;
+  if(type === 'right' && !(b.O.length >= 1 && b.X.length >= 4)) return null;
+  if(type === 'wrong' && !(b.X.length >= 1 && b.O.length >= 4)) return null;
+  const O = shuffleSeeded(b.O, rng), X = shuffleSeeded(b.X, rng);
+  const ansItem = (type === 'right') ? O[0] : X[0];
+  const dist = (type === 'right') ? X.slice(0, 4) : O.slice(0, 4);
+  const ps = shuffleSeeded(b.ps, rng)[0];
+  const choices = shuffleSeeded(dist.concat([ansItem]), rng);
+  return { type:type, name:n, ps:ps, choices:choices, ans:choices.indexOf(ansItem) };
+}
+function mockBuildOne(type, names, unit, topic, rng, ex){
+  return mockUsing(mockFilteredPool(names, ex), ()=>{
+    if(type === 'right' || type === 'wrong') return mockSoloQ(names[0], type, rng);
+    if(type === 'pair') return buildPairQ(names[0], names[1], unit, rng, topic);
+    if(type === 'box')  return buildBoxQ(names[0], names[1], unit, rng, topic);
+    if(type === 'venn') return buildVennQ(names[0], names[1], unit, rng, topic);
+    if(type === 'algo') return buildAlgoQ(names[0], names[1], unit, rng, topic);
+    if(type === 'trio') return buildTrioQ(names[0], names[1], names[2], unit, rng, topic);
+    return null;
+  });
+}
+// 가중 무작위 순열 — 가중치가 큰 유형이 앞에 서기 쉽다
+function mockTypeOrder(rng, types){
+  return types.map(t=>({ t:t, k:Math.pow(rng(), 1 / (MOCK_MIX_PLAIN[t] || 0.05)) }))
+              .sort((x,y)=> y.k - x.k).map(x=> x.t);
+}
+const MOCK_ALL_TYPES = ['right','wrong','pair','box','venn','algo','trio'];
+
+/* 사상가 n 이 중심인 문항 하나. c = { unit, ex, ban(짝으로 못 쓰는 사람), mate(짝 지정),
+   types(허용 유형), order(유형 순서 지정) }  → { q, names } 또는 null */
+function mockGenQ(n, rng, c){
+  const pool = mockPool();
+  const ex = c.ex || {};
+  const unit = c.unit;
+  const ban = c.ban || (()=> false);
+  const mateOk = m=> m !== n && !ban(m) && !mockSameSchool(n, m) && !!pool.byName[m];
+  const wide = (pool.unitMembers[unit] || []).filter(mateOk);
+  const topicOf = m=>{
+    const bt = pool.byName[n].topics, mt = pool.byName[m].topics;
+    let best = null, bn = 0;
+    Object.keys(bt).forEach(t=>{ if(mt[t] && bt[t] + mt[t] > bn){ bn = bt[t] + mt[t]; best = t; } });
+    return best;
+  };
+  const ventures = (type)=>{
+    const cand = pool.venn.filter(p=> p[0] === n || p[1] === n).map(p=> p[0] === n ? p[1] : p[0])
+      .filter(m=> c.mate ? m === c.mate : (mateOk(m) && wide.indexOf(m) >= 0));
+    const list = shuffleSeeded(cand, rng);
+    for(let i=0;i<list.length && i<4;i++){
+      const q = mockBuildOne(type, [n, list[i]], unit, topicOf(list[i]), rng, ex);
+      if(q) return { q:q, names:[n, list[i]] };
+    }
+    return null;
+  };
+  const tryType = type=>{
+    if(type === 'right' || type === 'wrong'){
+      if(c.mate) return null;
+      const q = mockBuildOne(type, [n], unit, null, rng, ex);
+      return q ? { q:q, names:[n] } : null;
+    }
+    if(type === 'pair' || type === 'box'){
+      const mates = c.mate ? [c.mate] : shuffleSeeded(wide, rng);
+      for(let i=0;i<mates.length && i<5;i++){
+        const q = mockBuildOne(type, [n, mates[i]], unit, topicOf(mates[i]), rng, ex);
+        if(q) return { q:q, names:[n, mates[i]] };
+      }
+      return null;
+    }
+    if(type === 'venn' || type === 'algo') return ventures(type);
+    if(type === 'trio'){
+      if(c.mates){
+        const q = mockBuildOne('trio', [n, c.mates[0], c.mates[1]], unit, null, rng, ex);
+        return q ? { q:q, names:[n, c.mates[0], c.mates[1]] } : null;
+      }
+      if(c.mate) return null;
+      const mates = wide.filter(m=> pool.byName[m].X.length >= 2);
+      const me = pool.byName[n];
+      if(mates.length < 2 || me.X.length < 2 || me.O.length < 1) return null;
+      for(let i=0;i<3;i++){
+        const two = shuffleSeeded(mates, rng).slice(0, 2);
+        const q = mockBuildOne('trio', [n, two[0], two[1]], unit, null, rng, ex);
+        if(q) return { q:q, names:[n, two[0], two[1]] };
+      }
+    }
+    return null;
+  };
+  const order = c.order || mockTypeOrder(rng, c.types || MOCK_ALL_TYPES);
+  for(let i=0;i<order.length;i++){
+    const r = tryType(order[i]);
+    if(r) return r;
+  }
+  return null;
+}
+
+/* ---------- 테마별 ---------- */
+function buildThemeSet(){
+  const pool = mockPool();
+  const names = mockThemeNames();
+  const rng = mulberry32(seedFromDate(mockSeedStr()));
+  const chosen = {};
+  names.forEach(n=>{ chosen[n] = 1; });
+  const ex = {};
+  const out = [];
+  names.forEach(n=>{
+    const unit = mockMainUnit(n);
+    const mates = {};
+    // 한 학자 다섯 문항: 단독 옳은/옳지 않은 · 갑을 · 보기에 그림 유형 하나를 섞는다
+    const plan = shuffleSeeded(['right', 'wrong', 'pair', 'box',
+      shuffleSeeded(['venn', 'algo', 'trio', 'pair'], rng)[0]], rng);
+    // 틀린 선지(X)가 모자란 학자는 「옳은 것」(X 4개 필요) 대신 「옳지 않은 것」(X 1개)으로 돌린다
+    if(pool.byName[n].X.length < 14) plan.forEach((t, i)=>{ if(t === 'right') plan[i] = 'wrong'; });
+    const mine = [];
+    plan.forEach(t=>{
+      const base = { unit:unit, ex:ex, ban:m=> chosen[m] };
+      const withMates = Object.assign({}, base, { ban:m=> chosen[m] || mates[m] });
+      // 위에서부터: 계획한 유형(짝 안 겹치게) → 계획한 유형 → 아무 유형 → 이미 쓴 선지를 풀어서라도
+      let r = mockGenQ(n, rng, Object.assign({ order:[t] }, withMates))
+           || mockGenQ(n, rng, Object.assign({ order:[t] }, base))
+           || mockGenQ(n, rng, Object.assign({ order:['wrong', 'pair', 'box', 'trio', 'right'] }, withMates))
+           || mockGenQ(n, rng, Object.assign({ types:MOCK_ALL_TYPES, ex:{} }, { unit:unit, ban:base.ban }));
+      if(!r) return;
+      mockQIds(r.q, ex);
+      r.names.slice(1).forEach(m=>{ mates[m] = 1; });
+      mine.push(r.q);
+    });
+    mockSpread(mine, rng).forEach(q=> out.push(q));
+  });
+  return out;
+}
+
+/* ---------- 정형화 (3개년 기출 분석) ----------
+   동양 8 · 서양 8 · 이데올로기 4 = 20문항 고정. 시험지 순서도 동양 → 서양 → 이데올로기.
+   꼭 나오는 비교: 이황vs이이 · 주자vs양명 (한 문항에 둘이 같이)
+   꼭 나오는 단독: 정약용 · 칸트 (단독 옳은/옳지 않은)
+   단독·비교 가리지 않고 꼭 나오는 학자: 스피노자 흄 맹자 순자 지눌 원효 스토아학파 에피쿠로스
+   공리주의(벤담·밀 가운데 한 사람 — 둘을 서로 비교하지는 않는다) · 사회계약설(홉스·로크·루소 —
+   정확히 한 문항을 배당하고, 그 문항에 한 명·두 명·세 명 중 몇이 들어가든 상관없다. 나머지 문항에는 안 나온다)
+   밀은 공리주의의 밀과 자유주의의 밀을 따로 본다(MOCK_SPLIT_BY_TOPIC) — 한 시험지에 둘 다 나올 수 있다
+   나머지 자리는 자율. 정형 학자(칸트·정약용)는 다른 문항의 짝으로 쓰지 않아 단독을 지킨다. */
+const MOCK_FORMAL_QUOTA = { east:8, west:8, ideo:4 };
+const MOCK_FORMAL_BUCKET = { 유교:'east', 불교:'east', 도가:'east', 근대:'east', 서양:'west', 이데올로기:'ideo' };
+const MOCK_FORMAL_UNIT = { 벤담:'서양', 밀:'서양', 칸트:'서양', 홉스:'이데올로기', 로크:'이데올로기', 루소:'이데올로기' };
+const MOCK_FORMAL_PAIRS = [['이황','이이'], ['주자','왕수인']];
+const MOCK_FORMAL_SOLO = ['정약용', '칸트'];
+const MOCK_FORMAL_MUST = ['스피노자','흄','맹자','순자','지눌','원효','스토아학파','에피쿠로스'];
+const MOCK_FORMAL_ONEOF = [['벤담','밀']];                        // 공리주의: 둘 중 한 사람
+const MOCK_FORMAL_CONTRACT = ['홉스','로크','루소'];             // 사회계약설: 한 문제를 배당 — 한 명이든 둘이든 셋이든
+const MOCK_FORMAL_EXCL = [['벤담','밀']];                           // 둘을 비교하지 않고, 한 사람만 낸다
+
+function buildFormalSet(){
+  const pool = mockPool();
+  const rng = mulberry32(seedFromDate(mockSeedStr()));
+  const used = {};
+  const left = { east:MOCK_FORMAL_QUOTA.east, west:MOCK_FORMAL_QUOTA.west, ideo:MOCK_FORMAL_QUOTA.ideo };
+  const out = { east:[], west:[], ideo:[] };
+  const cnt = { algo:0, venn:0 };
+  const unitOf = n=> MOCK_FORMAL_UNIT[n] || mockMainUnit(n);
+  const bucketOf = n=> MOCK_FORMAL_BUCKET[unitOf(n)] || null;
+  const exclWith = (a, b)=> MOCK_FORMAL_EXCL.some(g=> g.indexOf(a) >= 0 && g.indexOf(b) >= 0);
+  const soloKeep = {};
+  MOCK_FORMAL_SOLO.forEach(n=>{ soloKeep[n] = 1; });
+  const reserved = {};                       // 사회계약설 세 사람은 자기 문항 밖에서는 짝으로도 못 쓴다
+  MOCK_FORMAL_CONTRACT.forEach(n=>{ reserved[n] = 1; });
+  const ex = {};
+
+  const put = (r, bucket)=>{
+    out[bucket].push(r.q); left[bucket]--;
+    r.names.forEach(m=>{
+      used[m] = 1;
+      MOCK_FORMAL_EXCL.forEach(g=>{ if(g.indexOf(m) >= 0) g.forEach(x=>{ used[x] = 1; }); });
+    });
+    if(r.q.type === 'algo') cnt.algo++;
+    if(r.q.type === 'venn') cnt.venn++;
+    mockQIds(r.q, ex);
+  };
+  const types = (list)=> list.filter(t=> !(t === 'algo' && cnt.algo >= 2) && !(t === 'venn' && cnt.venn >= 2));
+  const gen = (n, extra)=>{
+    const b = bucketOf(n);
+    if(!b || left[b] <= 0 || !pool.byName[n]) return null;
+    const c = Object.assign({ unit:unitOf(n), ex:ex,
+      ban:m=> used[m] || soloKeep[m] || reserved[m] || exclWith(n, m) || bucketOf(m) !== b }, extra || {});
+    if(!c.order && !c.types) c.types = types(MOCK_ALL_TYPES);
+    const r = mockGenQ(n, rng, c);
+    if(r){ put(r, b); return r; }
+    return null;
+  };
+
+  // 1) 꼭 나오는 비교 — 한 문항에 둘이 같이. 재료가 안 되면 각자 단독으로라도 둘 다 낸다
+  MOCK_FORMAL_PAIRS.forEach(pr=>{
+    const [a, b] = shuffleSeeded(pr, rng);
+    if(used[a] || used[b]) return;
+    const r = gen(a, { mate:b, order:mockTypeOrder(rng, types(['pair','box','venn','algo'])) });
+    if(!r){ gen(a, { types:['right','wrong'] }); gen(b, { types:['right','wrong'] }); }
+  });
+  // 2) 꼭 나오는 단독
+  MOCK_FORMAL_SOLO.forEach(n=>{
+    if(!gen(n, { types:['right','wrong'], ban:m=> true })) gen(n, { types:['right','wrong'], ban:m=> true });
+  });
+  // 3) 사회계약설 — 한 문항. 몇 명이 들어가는지는 세트마다 다르다 (1·2·3명)
+  {
+    const inContract = m=> MOCK_FORMAL_CONTRACT.indexOf(m) >= 0;
+    const k = 1 + Math.floor(rng() * 3);
+    const pick = shuffleSeeded(MOCK_FORMAL_CONTRACT, rng);
+    let done = null;
+    if(k === 3) done = gen(pick[0], { mates:[pick[1], pick[2]], order:['trio'], ban:m=> !inContract(m) });
+    if(!done && k >= 2) done = gen(pick[0], { mate:pick[1], order:mockTypeOrder(rng, types(['pair','box','venn','algo'])), ban:m=> !inContract(m) });
+    if(!done) done = gen(pick[0], { types:['right','wrong'], ban:()=> true });
+    MOCK_FORMAL_CONTRACT.forEach(m=>{ used[m] = 1; });
+  }
+  // 4) 꼭 나오는 학자 — 단독이든 비교든 문항 하나에는 들어간다
+  const musts = MOCK_FORMAL_MUST.map(n=> [n]).concat(MOCK_FORMAL_ONEOF);
+  shuffleSeeded(musts, rng).forEach(group=>{
+    if(group.some(n=> used[n])) return;
+    gen(shuffleSeeded(group, rng)[0]);
+  });
+  // 5) 남은 자리는 자율 — 이 단원에서 아직 안 나온 사람으로
+  ['east', 'west', 'ideo'].forEach(b=>{
+    const cands = shuffleSeeded(pool.usable.filter(n=> !used[n] && !soloKeep[n] && !reserved[n] && bucketOf(n) === b), rng);
+    for(let i=0;i<cands.length && left[b] > 0;i++){
+      if(used[cands[i]]) continue;
+      gen(cands[i]);
+    }
+  });
+  return ['east', 'west', 'ideo'].reduce((all, b)=> all.concat(mockSpread(out[b], rng)), []);
+}
+
 /* ---------- 응시 상태 ---------- */
 function ensureMockRun(){
   const q = STATE.quiz;
   const today = todayStr();
   const setNo = q.setNo || 0;
   const n = mockSetN();
-  if(!q.run || q.run.date !== today || q.run.setNo !== setNo || mockRunN(q.run) !== n){
+  if(!q.run || q.run.date !== today || q.run.setNo !== setNo || mockRunN(q.run) !== n
+     || mockRunSig(q.run) !== mockSigNow()){
     q.run = { date:today, setNo:setNo, n:n, limit:mockSizeOf(n).min,
+              mode:mockMode(), names:(mockMode() === 'theme' ? mockThemeNames() : []),
               picks:[], submitted:false, score:0 };
   }
   mockRunDefaults(q.run);
@@ -1774,6 +2144,7 @@ function ensureMockRun(){
 function mockRunDefaults(run){
   // OMR 답안 — 채점은 이것으로 한다. 이미 채점된 옛 기록은 picks 로 채점됐으므로 만들지 않는다
   if(!run.omr && !run.submitted) run.omr = [];
+  if(!run.mode) run.mode = 'free';    // 옛 기록은 자유 출제였다
   if(!run.guess) run.guess = [];      // 문항별 「찍음」 표시
   if(!run.per) run.per = [];          // 문항별 쓴 시간(ms)
   if(typeof run.ms !== 'number') run.ms = 0;      // 시험지를 펴 놓은 총 시간(ms)
@@ -2043,7 +2414,7 @@ function mockStarIds(set, run){
 function mockHistKey(run){
   const n = mockRunN(run);
   const base = run.setNo ? (run.date + '#' + run.setNo) : run.date;
-  return base + (n === MOCK_N ? '' : '/' + n);
+  return base + mockKeySuffix(n, run.mode || 'free');
 }
 
 // force: 시간 종료처럼 묻지 않고 바로 채점
@@ -2081,7 +2452,7 @@ function submitMock(force){
     sec:Math.round(run.ms / 1000),
     per:set.map((q,i)=> Math.round((run.per[i] || 0) / 1000)),
     guess:set.map((q,i)=> run.guess[i] ? 1 : 0).reduce((a,b)=>a+b, 0),
-    slip:mockMismatch(run).length,
+    slip:mockMismatch(run).length, mode:run.mode || 'free',
     timeUp:run.timeUp ? 1 : 0
   };
   STATE.quiz.lastDate = run.date;
@@ -2097,9 +2468,33 @@ function newMockSet(){
   NAV.mockSubmitArm = false;
   ensureMockRun();
   saveStore();
-  go('mockExam');
+  go('mock');          // 시험지로 바로 들어가지 않고 설정 화면으로 — 크기·방식을 다시 고른다
+}
+function setMockMode(m){
+  if(mockMode() === m) return;
+  STATE.quiz.mode = m;
+  ensureMockRun();
+  saveStore();
+  mockRerender();
+}
+function toggleMockTheme(n){
+  const cur = (STATE.quiz.theme || []).slice();
+  const i = cur.indexOf(n);
+  if(i >= 0) cur.splice(i, 1);
+  else if(cur.length < MOCK_THEME_MAX && mockThemeOk(n)) cur.push(n);
+  STATE.quiz.theme = cur;
+  ensureMockRun();
+  saveStore();
+  mockRerender();
+}
+// 칩을 눌러도 화면이 맨 위로 튀지 않게
+function mockRerender(){
+  const y = (typeof window !== 'undefined') ? window.scrollY : 0;
+  render();
+  if(typeof window !== 'undefined') window.scrollTo(0, y);
 }
 function startMock(){
+  if(mockMode() === 'theme' && !mockThemeNames().length) return;
   NAV.omrOpen = false;
   NAV.mockSubmitArm = false;
   ensureMockRun();
@@ -2108,12 +2503,15 @@ function startMock(){
 }
 function mockHistoryList(){
   const h = STATE.quiz.history || {};
+  // 키는 '날짜[#세트번호][/문항수][~방식]' — 세트 번호가 0이면 '#'이 없어 '2026-10-06/10~t' 꼴이 된다
+  const dateOf = k=> k.split('#')[0].split(/[\/~]/)[0];
+  const no = k=> (k.indexOf('#') < 0 ? 0 : (parseInt(k.split('#')[1], 10) || 0));
   return Object.keys(h).sort((x,y)=>{
-    const dx = x.split('#'), dy = y.split('#');
-    if(dx[0] !== dy[0]) return dx[0] < dy[0] ? 1 : -1;
-    return (+(dy[1]||0)) - (+(dx[1]||0));
-  }).map(k=>({ date:k.split('#')[0], setNo:+(k.split('#')[1] || 0),
-               score:h[k].score, total:h[k].total, sec:h[k].sec }));
+    const dx = dateOf(x), dy = dateOf(y);
+    if(dx !== dy) return dx < dy ? 1 : -1;
+    return no(y) - no(x);
+  }).map(k=>({ date:dateOf(k), setNo:no(k),
+               score:h[k].score, total:h[k].total, sec:h[k].sec, mode:h[k].mode || 'free' }));
 }
 
 /* ---------- 학습 기록 백업 · 복원 ---------- */

@@ -18,7 +18,7 @@ function headerTitle(){
     paperSetup:['백지복습','아무것도 안 보고 직접 써보기'], paperWrite:['백지복습',''],
     oxSetup:['기출 OX','최신 기출 선지 O/X 판단'], oxQuiz:['기출 OX',''],
     psSetup:['제시문','제시문 보고 사상가 맞히기'], psQuiz:['제시문',''], tables:['비교표 모아보기','헷갈리는 개념 한눈에'],
-    mock:['모의고사','매일 20문항 · 전 범위 실력 점검'], mockExam:['모의고사',''], mockResult:['모의고사','채점 결과'],
+    mock:['모의고사','자유 · 테마별 · 정형화'], mockExam:['모의고사',''], mockResult:['모의고사','채점 결과'],
     stats:['학습 통계','', ] };
   return map[NAV.view] || ['윤리와 사상 노트',''];
 }
@@ -1103,6 +1103,63 @@ function mockJump(i){
 }
 
 /* ---------- 시작 화면 ---------- */
+/* 시험 시작 전 설정 카드 — 방식 셋(자유 · 테마별 · 정형화)과 방식별 선택 */
+function renderMockPicker(sz){
+  const mode = mockMode();
+  const date = todayStr().replace(/-/g, '.');
+  const tabs = `<div class="mock-mode" role="tablist" aria-label="출제 방식">
+    ${[['free', '자유'], ['theme', '테마별'], ['formal', '정형화']].map(m=>`
+      <button class="mock-mode-b ${mode === m[0] ? 'on' : ''}" role="tab" aria-selected="${mode === m[0]}"
+        onclick="setMockMode('${m[0]}')">${m[1]}</button>`).join('')}
+  </div>`;
+  let body;
+  if(mode === 'formal'){
+    body = `
+      <div class="mock-hero-label">${date} 정형화 모의고사</div>
+      <div class="mock-hero-score"><b>20</b><span> 문항 · 30분</span></div>
+      <div class="note" style="margin-top:8px;">동양 8 · 서양 8 · 이데올로기 4 (3개년 기출 분석)<br>
+        이황·이이, 주자·양명 비교와 정약용·칸트 단독은 늘 나오고,
+        스피노자 · 흄 · 공리주의 · 맹자 · 순자 · 지눌 · 원효 · 사회계약설 · 스토아 · 에피쿠로스도 빠지지 않아요.
+        나머지 자리는 그날그날 달라집니다.</div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="startMock()">시험 시작</button>`;
+  } else if(mode === 'theme'){
+    const picked = mockThemeNames();
+    const full = picked.length >= MOCK_THEME_MAX;
+    const groups = [['동양', ['유교', '불교', '도가', '근대']], ['서양', ['서양']], ['이데올로기', ['이데올로기']]];
+    const cands = mockThemeCandidates();
+    const n = Math.max(1, picked.length) * MOCK_THEME_EACH;
+    body = `
+      <div class="mock-hero-label">${date} 테마별 모의고사</div>
+      <div class="mock-hero-score"><b>${picked.length ? n : 0}</b><span> 문항 · ${picked.length ? mockSizeOf(n).min : 0}분</span></div>
+      <div class="note" style="margin-top:8px;">학자를 고르면 그 학자 문제만 <b>5문항</b>씩, 최대 4명(20문항)까지 나와요.
+        지금 <b>${picked.length}</b>/${MOCK_THEME_MAX}명 선택</div>
+      ${groups.map(g=>{
+        const list = cands.filter(c=> g[1].indexOf(c.u) >= 0);
+        return `<div class="mock-chip-grp">${g[0]}</div>
+          <div class="mock-chips">${list.map(c=>{
+            const on = picked.indexOf(c.n) >= 0;
+            return `<button class="mock-chip ${on ? 'on' : ''} ${(full && !on) ? 'dim' : ''}"
+              onclick='toggleMockTheme(${JSON.stringify(c.n)})' aria-pressed="${on}">${escHtml(c.n)}</button>`;
+          }).join('')}</div>`;
+      }).join('')}
+      <button class="btn btn-primary btn-block" style="margin-top:14px;" ${picked.length ? '' : 'disabled'}
+        onclick="startMock()">${picked.length ? '시험 시작' : '학자를 골라 주세요'}</button>`;
+  } else {
+    body = `
+      <div class="mock-hero-label">${date} 실력 점검</div>
+      <div class="mock-hero-score"><b>${sz.n}</b><span> 문항 · ${sz.min}분</span></div>
+      <div class="note" style="margin-top:8px;">전 범위 · 사상가는 겹치지 않게 뽑아요</div>
+      <div class="mock-size" role="group" aria-label="시험지 크기">
+        ${MOCK_SIZES.map(o=>`<button class="mock-size-b ${o.n === sz.n ? 'on' : ''}"
+          onclick="setMockSize(${o.n})" aria-pressed="${o.n === sz.n}">
+          <b>${o.n}문항</b><span>${o.min}분</span></button>`).join('')}
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="startMock()">시험 시작</button>`;
+  }
+  return tabs + body;
+}
+const MOCK_MODE_LABEL = { theme:'테마', formal:'정형' };
+
 function renderMockSetup(){
   const pool = mockPool();
   if(pool.usable.length < mockSetN()){
@@ -1135,16 +1192,7 @@ function renderMockSetup(){
       <div class="note" style="margin-top:6px;">시험지 표시 ${done}문항 · 남은 시간 ${mockFmtClock(mockLeftMs(run.ms, run))} · 시험지를 열면 시간이 다시 가요</div>
       <button class="btn btn-primary btn-block" style="margin-top:14px;" onclick="go('mockExam')">이어서 풀기</button>`;
   } else {
-    card = `
-      <div class="mock-hero-label">${todayStr().replace(/-/g,'.')} 실력 점검</div>
-      <div class="mock-hero-score"><b>${sz.n}</b><span> 문항 · ${sz.min}분</span></div>
-      <div class="note" style="margin-top:8px;">전 범위 · 사상가는 겹치지 않게 뽑아요</div>
-      <div class="mock-size" role="group" aria-label="시험지 크기">
-        ${MOCK_SIZES.map(o=>`<button class="mock-size-b ${o.n === sz.n ? 'on' : ''}"
-          onclick="setMockSize(${o.n})" aria-pressed="${o.n === sz.n}">
-          <b>${o.n}문항</b><span>${o.min}분</span></button>`).join('')}
-      </div>
-      <button class="btn btn-primary btn-block" style="margin-top:12px;" onclick="startMock()">시험 시작</button>`;
+    card = renderMockPicker(sz);
   }
 
   return `<div class="screen">
@@ -1177,7 +1225,7 @@ function renderMockSetup(){
       ${hist.slice(0,12).map(h=>{
         const pct = Math.round(h.score/h.total*100);
         return `<div class="hard-box mock-hist">
-          <span class="mock-hist-d">${h.date.slice(5).replace('-','.')}${h.setNo ? `<i>${h.setNo+1}회</i>` : ''}</span>
+          <span class="mock-hist-d">${h.date.slice(5).replace('-','.')}${h.setNo ? `<i>${h.setNo+1}회</i>` : ''}${MOCK_MODE_LABEL[h.mode] ? `<i>${MOCK_MODE_LABEL[h.mode]}</i>` : ''}</span>
           <div class="progress-bar" style="flex:1; margin:0;"><div style="width:${pct}%"></div></div>
           <span class="mock-hist-t">${h.sec ? mockFmtClock(h.sec*1000) : ''}</span>
           <span class="mock-hist-s"><b>${h.score}</b>/${h.total}</span>
