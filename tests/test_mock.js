@@ -35,9 +35,16 @@ const start = appSrc.indexOf('const MOCK_SIZES');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO)\b/gm, 'global.$1')
-  .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE')
+  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO|MOCK_ALIAS|MOCK_CATS)\b/gm, 'global.$1')
+  .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE').replace(/^let MOCK_CAT_OF/m, 'global.MOCK_CAT_OF')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
+
+
+// 범주(스토아학파 등)나 별칭(양명)으로 묶인 이름은 그 구성원·별칭의 이름으로 시작해도 같은 사람이다
+function ownNames(n){
+  return [n].concat(MOCK_CATS[n] || [], n === '자유주의' ? ['밀'] : [], Object.keys(MOCK_ALIAS).filter(k=> MOCK_ALIAS[k] === n));
+}
+function own(txt, n){ return ownNames(n).some(m=> txt.indexOf(m) === 0); }
 
 let fail = 0;
 function ok(cond, msg){ if(!cond){ console.error('  ✕ ' + msg); fail++; } }
@@ -178,8 +185,8 @@ for(let d=1; d<=40 * SIZES.length; d++){
     if(q.choices) ok(new Set(q.choices.map(c=>c.body)).size === 5, tag + ' 선지 중복');
     if(q.type === 'pair'){
       pairQ++;
-      ok(q.psA.name === q.a, tag + ' 갑 제시문 불일치');
-      ok(q.psB.name === q.b, tag + ' 을 제시문 불일치');
+      ok(mockCanon(q.psA.name, [q.psA.topic]) === q.a, tag + ' 갑 제시문 불일치');
+      ok(mockCanon(q.psB.name, [q.psB.topic]) === q.b, tag + ' 을 제시문 불일치');
       ok(q.a !== q.b, tag + ' 갑·을이 같은 사람');
       // 같은 라벨끼리 붙어 있어야 한다 (갑 → 을 → 갑과 을 순서)
       const seq = q.choices.map(c=>c.label);
@@ -192,9 +199,9 @@ for(let d=1; d<=40 * SIZES.length; d++){
         ok(!!c.label, tag + ' ' + (ci+1) + '선지 라벨 없음');
         // 라벨이 가리키는 사람의 선지가 맞는지 — 이게 이 유형의 핵심 안전장치
         const txt = oxById[c.id].text;
-        if(c.label === '갑') ok(txt.indexOf(q.a) === 0, tag + ' 갑 라벨에 다른 사람 선지');
-        else if(c.label === '을') ok(txt.indexOf(q.b) === 0, tag + ' 을 라벨에 다른 사람 선지');
-        else ok(txt.indexOf(q.a) === 0 || txt.indexOf(q.b) === 0, tag + ' 갑과 을 라벨 오류');
+        if(c.label === '갑') ok(own(txt, q.a), tag + ' 갑 라벨에 다른 사람 선지');
+        else if(c.label === '을') ok(own(txt, q.b), tag + ' 을 라벨에 다른 사람 선지');
+        else ok(own(txt, q.a) || own(txt, q.b), tag + ' 갑과 을 라벨 오류');
       });
     } else if(q.type === 'box'){
       boxQ++;
@@ -208,8 +215,8 @@ for(let d=1; d<=40 * SIZES.length; d++){
       q.items.forEach(it=>{
         ok(oxById[it.id].answer === (it.ok ? 'O' : 'X'), tag + ' 보기 ' + it.mark + ' O/X 불일치');
         const txt = oxById[it.id].text;
-        if(it.label === '갑' || it.label === '(가)') ok(txt.indexOf(q.a) === 0, tag + ' ' + it.mark + ' 갑 라벨 오류');
-        else if(it.label === '을' || it.label === '(나)') ok(txt.indexOf(q.b) === 0, tag + ' ' + it.mark + ' 을 라벨 오류');
+        if(it.label === '갑' || it.label === '(가)') ok(own(txt, q.a), tag + ' ' + it.mark + ' 갑 라벨 오류');
+        else if(it.label === '을' || it.label === '(나)') ok(own(txt, q.b), tag + ' ' + it.mark + ' 을 라벨 오류');
       });
     } else if(q.type === 'venn'){
       vennQ++;
@@ -224,10 +231,10 @@ for(let d=1; d<=40 * SIZES.length; d++){
         if(it.zone === 'A'){
           // 참이면 「갑은 을과 달리」 O선지, 거짓이면 「을은 갑과 달리」 O선지(=을만의 입장)
           ok(ans === 'O', tag + ' A영역 재료 오류');
-          ok(txt.indexOf(it.ok ? q.a : q.b) === 0, tag + ' A영역 주체 오류');
+          ok(own(txt, it.ok ? q.a : q.b), tag + ' A영역 주체 오류');
         } else if(it.zone === 'C'){
           ok(ans === 'O', tag + ' C영역 재료 오류');
-          ok(txt.indexOf(it.ok ? q.b : q.a) === 0, tag + ' C영역 주체 오류');
+          ok(own(txt, it.ok ? q.b : q.a), tag + ' C영역 주체 오류');
         } else {
           ok(ans === (it.ok ? 'O' : 'X'), tag + ' B영역 O/X 불일치');
         }
@@ -243,12 +250,12 @@ for(let d=1; d<=40 * SIZES.length; d++){
         const txt = oxById[it.id].text, ans = oxById[it.id].answer;
         if(it.zone === 'A'){
           // 참이면 「갑은 을과 달리」 O선지, 거짓이면 을만의 입장이거나 갑의 X선지
-          if(it.ok){ ok(ans === 'O' && txt.indexOf(q.a) === 0, tag + ' A자리 참 재료 오류'); }
-          else { ok(txt.indexOf(q.b) === 0 || ans === 'X', tag + ' A자리 거짓 재료 오류'); }
+          if(it.ok){ ok(ans === 'O' && own(txt, q.a), tag + ' A자리 참 재료 오류'); }
+          else { ok(own(txt, q.b) || ans === 'X', tag + ' A자리 거짓 재료 오류'); }
         } else if(it.zone === 'B'){
-          ok(txt.indexOf(q.a) === 0 && ans === (it.ok ? 'O' : 'X'), tag + ' B자리 오류');
+          ok(own(txt, q.a) && ans === (it.ok ? 'O' : 'X'), tag + ' B자리 오류');
         } else {
-          ok(txt.indexOf(q.b) === 0 && ans === (it.ok ? 'O' : 'X'), tag + ' C자리 오류');
+          ok(own(txt, q.b) && ans === (it.ok ? 'O' : 'X'), tag + ' C자리 오류');
         }
       });
     } else if(q.type === 'trio'){
@@ -261,7 +268,7 @@ for(let d=1; d<=40 * SIZES.length; d++){
       }
       q.choices.forEach((c,ci)=>{
         ok(oxById[c.id].answer === (ci === q.ans ? 'O' : 'X'), tag + ' ' + (ci+1) + '선지 구조 오류');
-        ok(oxById[c.id].text.indexOf(L[c.label]) === 0, tag + ' ' + (ci+1) + '선지 라벨 오류');
+        ok(own(oxById[c.id].text, L[c.label]), tag + ' ' + (ci+1) + '선지 라벨 오류');
       });
     } else if(q.type === 'trioVenn'){
       trioVennQ++;
@@ -300,14 +307,14 @@ for(let d=1; d<=40 * SIZES.length; d++){
       });
     } else {
       soloQ++;
-      ok(q.ps.name === q.name, tag + ' 제시문 사상가 불일치');
+      ok(mockCanon(q.ps.name, [q.ps.topic]) === q.name, tag + ' 제시문 사상가 불일치');
       q.choices.forEach((c,ci)=>{
         const real = oxById[c.id].answer;
         const want = (ci === q.ans)
           ? (q.type === 'right' ? 'O' : 'X')
           : (q.type === 'right' ? 'X' : 'O');
         ok(real === want, tag + ' ' + (ci+1) + '선지 구조 오류');
-        ok(oxById[c.id].text.indexOf(q.name) === 0, tag + ' ' + (ci+1) + '선지 사상가 불일치');
+        ok(own(oxById[c.id].text, q.name), tag + ' ' + (ci+1) + '선지 사상가 불일치');
       });
     }
   });
@@ -400,11 +407,13 @@ for(let d=1; d<=40 * SIZES.length; d++){
   ok(r.starred.length > 0 && r.starred.every(id=> STATE.ox.stars[id]), '제출 때 별표가 안 붙음');
   // 별표는 OMR 답 기준 — 2번(빈칸)은 선지 전부
   const q2 = set6[1];
-  const boxy = { box:1, venn:1, algo:1 };
+  const boxy = { box:1, venn:1, algo:1, trioVenn:1 };   // 3중 벤도 items 에 선지가 있다
   const list2 = boxy[q2.type] ? q2.items : q2.choices;
   ok(list2.every(c=> STATE.ox.stars[c.id]), 'OMR 빈칸 문항 선지가 별표 안 됨 (' + list2.length + ')');
 
   newMockSet();
+  ok(NAV.view === 'mock', '새 세트는 시험지가 아니라 설정 화면(크기·방식 선택)으로 가야 함');
+  startMock();
   ok(STATE.quiz.history['2026-10-06'] && mockHistoryList().length === 1, '새 세트가 이전 기록을 지움');
   ok(Array.isArray(STATE.quiz.run.omr) && STATE.quiz.run.omr.length === 0, '새 세트 OMR이 비어 있지 않음');
 
