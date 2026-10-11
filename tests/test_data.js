@@ -53,6 +53,20 @@ const TOPIC_IDS = new Set(TOPICS.map(t=> t.id));
 const OX_BY_ID = {}; OX.forEach(x=> OX_BY_ID[x.id] = x);
 const PS_BY_ID = {}; PS.forEach(p=> PS_BY_ID[p.id] = p);
 
+// 범주(스토아학파 등)·별칭(양명)은 구성원·별칭 이름으로 쓴 기출도 같은 사람의 것이다 — app.js 의 MOCK_CATS · MOCK_ALIAS 를 읽는다
+const APPSRC = fs.readFileSync(path.join(APP, 'app.js'), 'utf8');
+const CATS = {}, ALIAS = {};
+(APPSRC.split('const MOCK_CATS = {')[1].split('\n};')[0].match(/'[^']+'\s*:\s*\[[^\]]*\]/g) || []).forEach(m=>{
+  const k = m.match(/^'([^']+)'/)[1];
+  CATS[k] = (m.match(/'[^']+'/g) || []).slice(1).map(x=> x.slice(1, -1));
+});
+(APPSRC.split('const MOCK_ALIAS = {')[1].split('}')[0].match(/'[^']+'\s*:\s*'[^']+'/g) || []).forEach(m=>{
+  const q = m.match(/'([^']+)'\s*:\s*'([^']+)'/); ALIAS[q[1]] = q[2];
+});
+function aka(n){
+  return [n].concat(CATS[n] || [], Object.keys(ALIAS).filter(k=> ALIAS[k] === n));
+}
+
 CMP.forEach(x=>{
   ok(!!x.note && x.note.length >= 40, '자체 제작 해설이 없거나 짧다: ' + x.id);
   ok(x.answer !== 'X' || !!x.fix, '자체 제작 X선지에 fix 가 없다: ' + x.id);
@@ -61,7 +75,7 @@ CMP.forEach(x=>{
   (x.basis || []).forEach(b=>{
     const it = OX_BY_ID[b];
     ok(!!it, '없는 근거 id: ' + b + ' (' + x.id + ')');
-    if(it) ok(x.pair.some(n=> it.text.indexOf(n) >= 0),
+    if(it) ok(x.pair.some(n=> aka(n).some(m=> it.text.indexOf(m) >= 0)),
               '근거가 이 사상가와 무관: ' + x.id + ' ← ' + b);
   });
   // 5) 원전

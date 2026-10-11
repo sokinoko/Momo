@@ -127,6 +127,7 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
   const unitBy = ['east', 'west', 'ideo'];
   let sets = 0;
   const kHist = {};
+  const ansPos = {};
   const stat = { pairIn:0, vennAlgo:0 };
   for(let d=1; d<=28; d++){
     for(let no=0; no<3; no++){
@@ -147,6 +148,13 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
       const together = (a, b)=> set.some(q=> namesOf(q).indexOf(a) >= 0 && namesOf(q).indexOf(b) >= 0);
       ok(together('이황', '이이'), tag + ' 이황·이이 비교가 한 문항에 없음');
       ok(together('주자', '왕수인'), tag + ' 주자·양명 비교가 한 문항에 없음');
+      // 정형화 갑·을 5지선다는 ⑤번이 언제나 「갑과 을」 비교 선지다
+      set.forEach((q, i)=>{
+        if(q.type !== 'pair') return;
+        ok(q.choices.length === 5 && q.choices[4].who.indexOf('·') >= 0, tag + ' ' + (i + 1) + '번 ⑤가 「갑과 을」 비교 선지가 아님');
+        ok(q.choices.slice(0, 4).every(c=> c.who.indexOf('·') < 0), tag + ' ' + (i + 1) + '번 ①~④에 비교 선지가 섞임');
+        ansPos[q.ans] = (ansPos[q.ans] || 0) + 1;
+      });
       MOCK_FORMAL_SOLO.forEach(n=>{
         const q = set.find(x=> namesOf(x).indexOf(n) >= 0);
         ok(q && (q.type === 'right' || q.type === 'wrong') && q.name === n, tag + ' ' + n + ' 단독 문항이 아님');
@@ -179,6 +187,8 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
     }
   }
   ok(kHist[1] > 0 && kHist[2] > 0 && kHist[3] > 0, '사회계약설 1·2·3명이 모두 나와야 함 ' + JSON.stringify(kHist));
+  ok(ansPos[4] > 0 && ansPos[0] > 0, '정답이 ⑤에도 ①에도 나와야 함 ' + JSON.stringify(ansPos));
+  console.log('갑·을 5지선다 정답 위치 ' + JSON.stringify(ansPos));
   console.log('사회계약설 인원 분포 ' + JSON.stringify(kHist));
   console.log('정형화 ' + sets + '세트 검사 · 그림 문항 평균 ' + (stat.vennAlgo / sets).toFixed(1) + '개');
   // 같은 날·같은 세트 번호면 같은 문제, 방식이 다르면 다른 시험지
@@ -271,6 +281,35 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
   startMock(); submitMock(true);
   const hl = mockHistoryList();
   ok(hl.length === 2 && hl[0].setNo === 1 && hl[0].mode === 'free' && hl[1].mode === 'theme', '기록 목록 ' + JSON.stringify(hl));
+}
+
+/* ---------- 이데올로기: 주제 묶음 안에서만 비교 ---------- */
+{
+  const names = pool.byName;
+  Object.keys(MOCK_IDEO_GROUPS).forEach(g=> MOCK_IDEO_GROUPS[g].forEach(m=>
+    ok(!!names[mockCanon(m)] || !!MOCK_CATS[m], '묶음 ' + g + ' 의 ' + m + ' 이(가) 출제 풀에 없음')));
+  // 짝·차이 맵에 금지된 조합이 없다
+  Object.keys(pool.pairs).forEach(k=>{ const ab = k.split('|'); ok(!mockSameSchool(ab[0], ab[1]), '금지된 짝 ' + k); });
+  Object.keys(pool.diffs).forEach(k=>{ const ab = k.split('|'); ok(!mockSameSchool(ab[0], ab[1]), '금지된 차이 짝 ' + k); });
+  ok(mockSameSchool('스미스', '하이에크') && !mockSameSchool('스미스', '케인스') && !mockSameSchool('케인스', '하이에크'), '스미스·하이에크는 같이 안 냄');
+  ok(mockIdeoBan('홉스', '칸트') && !mockIdeoBan('칸트', '흄') && !mockIdeoBan('공화주의', '자유주의'), '묶음 규칙');
+  // 정형화·자유 모드 전체에서 이데올로기끼리의 세트가 규칙을 지킨다
+  let checked = 0;
+  ['formal', 'free'].forEach(mode=>{
+    for(let d=1; d<=20; d++) for(let no=0; no<3; no++){
+      STATE.quiz = { setNo:no, run:null, mode:mode, n:20 };
+      TODAY = '2026-12-' + String(d).padStart(2, '0');
+      const set = buildMockSet();
+      set.forEach((q, i)=>{
+        const ns = namesOf(q);
+        for(let a=0;a<ns.length;a++) for(let b=a+1;b<ns.length;b++){
+          ok(!mockSameSchool(ns[a], ns[b]), TODAY + '#' + no + ' ' + mode + ' ' + (i+1) + '번에 ' + ns[a] + '·' + ns[b] + ' 가 함께 나옴');
+          checked++;
+        }
+      });
+    }
+  });
+  ok(checked > 100, '이데올로기 규칙 검사 표본 ' + checked);
 }
 
 console.log(fail ? '실패 ' + fail + '건' : '=== 모드 테스트 완료 ===');
