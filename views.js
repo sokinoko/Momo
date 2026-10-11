@@ -854,40 +854,49 @@ function mockEraWord(era){
   return (era ? era + ' ' : '') + '사상가';
 }
 
+/* 갑·을(·병)의 시대·지역 수식어는 사람마다 따로 적는다 — 「서양 사상가 갑, 을, 병」으로 뭉뚱그리지 않는다.
+     「고대 서양 사상가 갑, 근대 서양 사상가 을과 병」  ← 연달아 같은 수식어면 한 번만 쓰고 「과」로 잇는다
+     「근대 서양 사상가 갑, 을」                          ← 모두 같으면 쉼표로 이어 한 번만
+   figure=true 는 (나) 그림 유형 — 사회사상가는 수식어 없이 「사상가」만 쓴다 (실제 시험지가 그렇다) */
+function mockWhoPhrase(names, figure){
+  const marks = MOCK_TRIO_LB;
+  const word = e=> (e === '사회') ? (figure ? '사상가' : '사회사상가') : (e + ' 사상가');
+  const groups = [];
+  names.forEach((n, i)=>{
+    const e = mockEra(n), g = groups[groups.length - 1];
+    if(g && g.e === e) g.l.push(marks[i]); else groups.push({ e:e, l:[marks[i]] });
+  });
+  if(groups.length === 1) return word(groups[0].e) + ' ' + groups[0].l.join(', ');
+  return groups.map(g=> word(g.e) + ' ' + (g.l.length === 2 ? g.l[0] + '과 ' + g.l[1] : g.l.join(', '))).join(', ');
+}
+
 function mockStemText(q){
   if(q.type === 'trioVenn'){
-    const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
-    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을, 병의 입장을 (나) 그림으로 표현할 때, ' +
+    return '(가)의 ' + mockWhoPhrase(q.who, true) + '의 입장을 (나) 그림으로 표현할 때, ' +
            'A~D에 해당하는 진술로 적절한 것만을 <보기>에서 고른 것은?';
   }
   if(q.type === 'critique'){
-    const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
-    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을, 병의 입장에서 서로에게 제기할 수 있는 비판을 ' +
+    return '(가)의 ' + mockWhoPhrase(q.who, true) + '의 입장에서 서로에게 제기할 수 있는 비판을 ' +
            '(나) 그림으로 표현할 때, A~F에 해당하는 내용으로 가장 적절한 것은?';
   }
   if(q.type === 'trio'){
-    const era = mockEraPair(q.who[0], q.who[1], q.pairTopic, q.unit);
-    return mockEraWord(era) + ' 갑, 을, 병의 입장으로 옳은 것은?';
+    return mockWhoPhrase(q.who, false) + '의 입장으로 옳은 것은?';
   }
   if(q.type === 'algo'){
-    const era = mockEraPair(q.a, q.b, q.pairTopic, q.unit);
-    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을의 입장을 (나) 그림으로 탐구하고자 할 때, ' +
+    return '(가)의 ' + mockWhoPhrase([q.a, q.b], true) + '의 입장을 (나) 그림으로 탐구하고자 할 때, ' +
            'A~C에 들어갈 적절한 질문만을 <보기>에서 있는 대로 고른 것은?';
   }
   if(q.type === 'venn'){
-    const era = mockEraPair(q.a, q.b, q.pairTopic, q.unit);
-    return '(가)의 ' + (era && era !== '사회' ? era + ' ' : '') + '사상가 갑, 을의 입장을 (나) 그림으로 표현할 때, ' +
+    return '(가)의 ' + mockWhoPhrase([q.a, q.b], true) + '의 입장을 (나) 그림으로 표현할 때, ' +
            'A~C에 해당하는 적절한 진술만을 <보기>에서 있는 대로 고른 것은?';
   }
   if(q.type === 'box'){
-    const era = mockEraPair(q.a, q.b, q.pairTopic, q.unit);
     if(q.ism) return '사회사상 (가), (나)의 입장으로 옳은 것만을 <보기>에서 고른 것은?';
-    return mockEraWord(era) + ' 갑, 을의 입장으로 옳은 것만을 <보기>에서 고른 것은?';
+    return mockWhoPhrase([q.a, q.b], false) + '의 입장으로 옳은 것만을 <보기>에서 고른 것은?';
   }
   if(q.type === 'pair'){
-    const era = mockEraPair(q.a, q.b, q.pairTopic, q.unit);
     if(q.ism) return '사회사상 (가), (나)의 입장으로 가장 적절한 것은?';
-    return mockEraWord(era) + ' 갑, 을의 입장으로 옳은 것은?';
+    return mockWhoPhrase([q.a, q.b], false) + '의 입장으로 옳은 것은?';
   }
   const era = mockEra(q.name);
   const tail = (q.type === 'right') ? '옳은 것은?' : '옳지 않은 것은?';

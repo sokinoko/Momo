@@ -866,7 +866,8 @@ function mockPool(){
       b[it.answer === 'X' ? 'X' : 'O'].push(Object.assign({body:sp.body}, base));
       return;
     }
-    const pr = mockSplitPair(it.text, names, it.topics);
+    let pr = mockSplitPair(it.text, names, it.topics);
+    if(pr && mockSameSchool(pr.a, pr.b)) pr = null;
     if(pr){
       const k = mockPairKey(pr.a, pr.b);
       const p = pairs[k] || (pairs[k] = {O:[], X:[]});
@@ -874,7 +875,8 @@ function mockPool(){
       p[it.answer === 'X' ? 'X' : 'O'].push(Object.assign({body:pr.body, plainBody:noAll}, base));
       return;
     }
-    const df = mockSplitDiff(it.text, names, it.topics);
+    let df = mockSplitDiff(it.text, names, it.topics);
+    if(df && mockSameSchool(df.a, df.b)) df = null;
     if(df && it.answer === 'O'){
       const k = mockDiffKey(df.a, df.b);
       (diffs[k] || (diffs[k] = [])).push(Object.assign({body:df.body}, base));
@@ -1174,11 +1176,13 @@ function buildMockSet(){
         .filter(m=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n,m)
                  && pool.byName[m].X.length >= 2);
       if(mates3.length >= 2 && pool.byName[n].X.length >= 2 && pool.byName[n].O.length >= 1){
-        const pick2 = shuffleSeeded(mates3, rng).slice(0,2);
+        const pick2 = mockPick2(mates3, rng, n);
+        if(!pick2){ type = 'pair'; } else {
         const q = buildTrioQ(n, pick2[0], pick2[1], unit3, rng, null);
         if(q){ qs.push(q); used[n] = 1; used[pick2[0]] = 1; used[pick2[1]] = 1; continue; }
+        }
       }
-      type = 'pair';
+      if(type === 'trio') type = 'pair';
     }
 
     if(type === 'box' || type === 'pair'){
@@ -1188,7 +1192,7 @@ function buildMockSet(){
       // 같은 단원 안이라면 주제가 달라도 묶는다. 스피노자와 스토아처럼 실제로 자주 붙는 조합이 있다.
       const mateOk = (m)=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n,m);
       const near = (pool.topicMembers[topic] || []).filter(mateOk);
-      const wide = (pool.unitMembers[unit] || []).filter(mateOk);
+      const wide = (pool.unitMembers[unit] || []).concat(mockIdeoMates(n)).filter((m,i,a)=> a.indexOf(m) === i && pool.pairable.indexOf(m) >= 0).filter(mateOk);
       const useNear = near.length && (rng() < 0.5 || !wide.length);
       const mates = useNear ? near : wide;
       const sharedTopic = useNear ? topic : null;
@@ -1270,13 +1274,41 @@ const MOCK_ERA = {
 };
 const MOCK_UNIT_ERA = { 이데올로기:'사회', 서양:'서양', 유교:'동양', 불교:'동양 불교', 도가:'동양', 근대:'근대 한국' };
 // 학파 이름과 그 학파에 속한 사람은 갑·을로 묶지 않는다 (대조가 성립하지 않음)
-const MOCK_SAME_SCHOOL = [['스토아학파','아우렐리우스','에픽테토스','키케로','세네카']];
+const MOCK_SAME_SCHOOL = [['스토아학파','아우렐리우스','에픽테토스','키케로','세네카'], ['스미스','하이에크']];
+/* 이데올로기는 주제마다 쌍으로 묶어 비교한다 — 같은 주제 안의 사람끼리만. (생윤처럼)
+   두 사람이 모두 어느 주제 묶음에 속하는데 겹치는 묶음이 없으면 짝으로 쓰지 않는다. */
+const MOCK_IDEO_GROUPS = {
+  '국가의 역할':['공화주의','자유주의'], '자본주의':['스미스','케인스','하이에크'],
+  '자본주의의 대안':['마르크스','민주 사회주의'], '사회계약설':['홉스','로크','루소'],
+  '평화 이론':['칸트','갈퉁','생피에르','에라스뮈스','묵자'],
+  '이상 사회론':['플라톤','모어','마르크스','롤스'],
+  '민주주의':['슘페터','하버마스','페리클레스','롤스'],
+  '세계시민주의와 해외 원조':['롤스','싱어','누스바움']
+};
+function mockIdeoGroupsOf(n){ return Object.keys(MOCK_IDEO_GROUPS).filter(g=> MOCK_IDEO_GROUPS[g].indexOf(n) >= 0); }
+function mockIdeoBan(a, b){
+  const ga = mockIdeoGroupsOf(a), gb = mockIdeoGroupsOf(b);
+  return !!(ga.length && gb.length && !ga.some(g=> gb.indexOf(g) >= 0));
+}
+function mockIdeoMates(n){
+  const out = [];
+  mockIdeoGroupsOf(n).forEach(g=> MOCK_IDEO_GROUPS[g].forEach(m=>{ if(m !== n && out.indexOf(m) < 0) out.push(m); }));
+  return out;
+}
 function mockSameSchool(a, b){
   for(let i=0;i<MOCK_SAME_SCHOOL.length;i++){
     const g = MOCK_SAME_SCHOOL[i];
     if(g.indexOf(a) >= 0 && g.indexOf(b) >= 0) return true;
   }
-  return false;
+  return mockIdeoBan(a, b);
+}
+// 갑·을·병 세 사람 — 서로 짝이 되는 둘을 고른다 (n 은 고정)
+function mockPick2(list, rng, n){
+  const sh = shuffleSeeded(list, rng);
+  for(let i=0;i<sh.length;i++) for(let j=i+1;j<sh.length;j++){
+    if(!mockSameSchool(sh[i], sh[j]) && (!n || (!mockSameSchool(n, sh[i]) && !mockSameSchool(n, sh[j])))) return [sh[i], sh[j]];
+  }
+  return null;
 }
 // 사람이 아니라 사상(이념) 이름인 것들 — 발문에서 갑/을 대신 (가)/(나)를 쓴다
 const MOCK_ISM = { '자유주의':1, '공화주의':1, '민주 사회주의':1, '규칙 공리주의':1 };
@@ -1300,7 +1332,8 @@ function mockEraPair(a, b, pairTopic, unit){
 function mockIsIsm(name){ return !!MOCK_ISM[name]; }
 
 // 갑·을 대조 문항. 실제 시험지처럼 ①② 갑 · ③④ 을 · ⑤ 갑과 을 순서로 배치한다.
-function buildPairQ(a, b, unit, rng, pairTopic){
+// opt.fifth = 정형화 — ⑤는 언제나 「갑과 을」 비교 선지다 (자리 구성도 갑2·을2·공통1로 고정, 정답은 어느 자리든).
+function buildPairQ(a, b, unit, rng, pairTopic, opt){
   const pool = mockPool();
   const A = pool.byName[a], B = pool.byName[b];
   const ism = mockIsIsm(a) && mockIsIsm(b);
@@ -1315,9 +1348,14 @@ function buildPairQ(a, b, unit, rng, pairTopic){
   // 갑 2 · 을 2 · 공통 1  /  갑 3 · 을 2  /  갑 2 · 을 3
   const hasBoth = (prO.length + prX.length) > 0;
   const plans = [];
-  if(hasBoth) plans.push(['A','A','B','B','P']);
-  plans.push(['A','A','A','B','B']);
-  plans.push(['A','A','B','B','B']);
+  if(opt && opt.fifth){
+    if(!pr.X.length) return null;               // ⑤에 틀린 비교 선지를 못 넣는다
+    plans.push(['A','A','B','B','P']);
+  } else {
+    if(hasBoth) plans.push(['A','A','B','B','P']);
+    plans.push(['A','A','A','B','B']);
+    plans.push(['A','A','B','B','B']);
+  }
   const plan = plans[Math.floor(rng() * plans.length)];
 
   // 정답이 나올 자리를 고른다 (그 자리에 O선지, 나머지는 전부 X선지)
@@ -1910,10 +1948,10 @@ function mockSoloQ(n, type, rng){
   const choices = shuffleSeeded(dist.concat([ansItem]), rng);
   return { type:type, name:n, ps:ps, choices:choices, ans:choices.indexOf(ansItem) };
 }
-function mockBuildOne(type, names, unit, topic, rng, ex){
+function mockBuildOne(type, names, unit, topic, rng, ex, opt){
   return mockUsing(mockFilteredPool(names, ex), ()=>{
     if(type === 'right' || type === 'wrong') return mockSoloQ(names[0], type, rng);
-    if(type === 'pair') return buildPairQ(names[0], names[1], unit, rng, topic);
+    if(type === 'pair') return buildPairQ(names[0], names[1], unit, rng, topic, opt);
     if(type === 'box')  return buildBoxQ(names[0], names[1], unit, rng, topic);
     if(type === 'venn') return buildVennQ(names[0], names[1], unit, rng, topic);
     if(type === 'algo') return buildAlgoQ(names[0], names[1], unit, rng, topic);
@@ -1928,6 +1966,12 @@ function mockTypeOrder(rng, types){
 }
 const MOCK_ALL_TYPES = ['right','wrong','pair','box','venn','algo','trio'];
 
+// 「A와 B는 모두」 선지(틀린 것)가 하나라도 있는 짝인가 — 정형화 ⑤번 비교 선지의 재료
+function mockPairHasBoth(a, b){
+  const pr = mockPool().pairs[mockPairKey(a, b)];
+  return !!(pr && pr.X.length >= 1);
+}
+
 /* 사상가 n 이 중심인 문항 하나. c = { unit, ex, ban(짝으로 못 쓰는 사람), mate(짝 지정),
    types(허용 유형), order(유형 순서 지정) }  → { q, names } 또는 null */
 function mockGenQ(n, rng, c){
@@ -1936,7 +1980,7 @@ function mockGenQ(n, rng, c){
   const unit = c.unit;
   const ban = c.ban || (()=> false);
   const mateOk = m=> m !== n && !ban(m) && !mockSameSchool(n, m) && !!pool.byName[m];
-  const wide = (pool.unitMembers[unit] || []).filter(mateOk);
+  const wide = (pool.unitMembers[unit] || []).concat(mockIdeoMates(n)).filter((m,i,a)=> a.indexOf(m) === i && pool.pairable.indexOf(m) >= 0).filter(mateOk);
   const topicOf = m=>{
     const bt = pool.byName[n].topics, mt = pool.byName[m].topics;
     let best = null, bn = 0;
@@ -1960,9 +2004,12 @@ function mockGenQ(n, rng, c){
       return q ? { q:q, names:[n] } : null;
     }
     if(type === 'pair' || type === 'box'){
-      const mates = c.mate ? [c.mate] : shuffleSeeded(wide, rng);
+      const fifth = (type === 'pair' && c.fifth) ? { fifth:true } : null;
+      // 정형화의 ⑤ 비교 선지는 「A와 B는 모두」 선지가 있는 짝에서만 만들 수 있다 — 그런 짝을 앞에 세운다
+      let mates = c.mate ? [c.mate] : shuffleSeeded(wide, rng);
+      if(fifth && !c.mate) mates = mates.filter(m=> mockPairHasBoth(n, m));
       for(let i=0;i<mates.length && i<5;i++){
-        const q = mockBuildOne(type, [n, mates[i]], unit, topicOf(mates[i]), rng, ex);
+        const q = mockBuildOne(type, [n, mates[i]], unit, topicOf(mates[i]), rng, ex, fifth);
         if(q) return { q:q, names:[n, mates[i]] };
       }
       return null;
@@ -1978,7 +2025,8 @@ function mockGenQ(n, rng, c){
       const me = pool.byName[n];
       if(mates.length < 2 || me.X.length < 2 || me.O.length < 1) return null;
       for(let i=0;i<3;i++){
-        const two = shuffleSeeded(mates, rng).slice(0, 2);
+        const two = mockPick2(mates, rng, n);
+        if(!two) break;
         const q = mockBuildOne('trio', [n, two[0], two[1]], unit, null, rng, ex);
         if(q) return { q:q, names:[n, two[0], two[1]] };
       }
@@ -2037,6 +2085,7 @@ function buildThemeSet(){
    공리주의(벤담·밀 가운데 한 사람 — 둘을 서로 비교하지는 않는다) · 사회계약설(홉스·로크·루소 —
    정확히 한 문항을 배당하고, 그 문항에 한 명·두 명·세 명 중 몇이 들어가든 상관없다. 나머지 문항에는 안 나온다)
    밀은 공리주의의 밀과 자유주의의 밀을 따로 본다(MOCK_SPLIT_BY_TOPIC) — 한 시험지에 둘 다 나올 수 있다
+   갑·을 5지선다는 ⑤번이 언제나 「갑과 을」 비교 선지다(buildPairQ opt.fifth).
    나머지 자리는 자율. 정형 학자(칸트·정약용)는 다른 문항의 짝으로 쓰지 않아 단독을 지킨다. */
 const MOCK_FORMAL_QUOTA = { east:8, west:8, ideo:4 };
 const MOCK_FORMAL_BUCKET = { 유교:'east', 불교:'east', 도가:'east', 근대:'east', 서양:'west', 이데올로기:'ideo' };
@@ -2078,7 +2127,7 @@ function buildFormalSet(){
   const gen = (n, extra)=>{
     const b = bucketOf(n);
     if(!b || left[b] <= 0 || !pool.byName[n]) return null;
-    const c = Object.assign({ unit:unitOf(n), ex:ex,
+    const c = Object.assign({ unit:unitOf(n), ex:ex, fifth:true,
       ban:m=> used[m] || soloKeep[m] || reserved[m] || exclWith(n, m) || bucketOf(m) !== b }, extra || {});
     if(!c.order && !c.types) c.types = types(MOCK_ALL_TYPES);
     const r = mockGenQ(n, rng, c);
@@ -2090,7 +2139,8 @@ function buildFormalSet(){
   MOCK_FORMAL_PAIRS.forEach(pr=>{
     const [a, b] = shuffleSeeded(pr, rng);
     if(used[a] || used[b]) return;
-    const r = gen(a, { mate:b, order:mockTypeOrder(rng, types(['pair','box','venn','algo'])) });
+    // 갑·을 5지선다(⑤ 갑과 을)를 먼저 시도하고, 재료가 안 되면 다른 비교 유형으로
+    const r = gen(a, { mate:b, order:['pair'].concat(mockTypeOrder(rng, types(['box','venn','algo']))) });
     if(!r){ gen(a, { types:['right','wrong'] }); gen(b, { types:['right','wrong'] }); }
   });
   // 2) 꼭 나오는 단독
