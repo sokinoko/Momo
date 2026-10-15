@@ -2909,3 +2909,95 @@ function overallProgress(){
 
 /* ---------- 퀴즈 풀 생성 ---------- */
 
+
+/* ---------- 사상가 아카이브 ----------
+   이름을 찾으면 그 사람의 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한 곳에 모인다.
+   이름 읽는 규칙은 모의고사·약점 통계와 같다(mockCanon: 별칭·범주·밀 분리가 그대로 따라온다). */
+let ARC_CACHE = null;
+function arcIndex(){
+  if(ARC_CACHE) return ARC_CACHE;
+  const people = {};
+  const get = n=> people[n] || (people[n] = { name:n, aka:{}, topics:{}, ps:[], ox:[], figs:[] });
+  PASSAGES.forEach(p=>{
+    const r = get(mockCanon(p.name, [p.topic]));
+    r.ps.push(p);
+    r.topics[p.topic] = (r.topics[p.topic] || 0) + 1;
+    (p.aliases || []).concat([p.name]).forEach(a=>{ r.aka[a] = 1; });
+  });
+  Object.keys(MOCK_CATS).forEach(c=>{ if(people[c]) MOCK_CATS[c].forEach(m=>{ people[c].aka[m] = 1; }); });
+  Object.keys(MOCK_ALIAS).forEach(a=>{ const n = MOCK_ALIAS[a]; if(people[n]) people[n].aka[a] = 1; });
+  // 필기 속 「곁들여 나오는 사상가」
+  DATA.forEach(t=>{
+    (t.figures || []).forEach(f=>{
+      const r = get(mockCanon(f.name, [t.id]));
+      r.figs.push({ topic:t, f:f });
+      r.aka[f.name] = 1;
+      r.topics[t.id] = (r.topics[t.id] || 0) + 1;
+    });
+  });
+  // 주제 이름에 들어 있는 사람(이황 vs 이이 · 실학과 정약용 …)
+  Object.keys(people).forEach(n=>{
+    const r = people[n];
+    const keys = Object.keys(r.aka).concat([n]).filter(a=> a.length >= 2);
+    DATA.forEach(t=>{
+      if(keys.some(a=> t.title.indexOf(a) >= 0)) r.topics[t.id] = (r.topics[t.id] || 0) + 0.5;
+    });
+  });
+  // 선지 — 기출 · 자체 제작 모두
+  const idx = weakOxIndex();
+  const all = mockSourceItems();
+  const seen = {};
+  all.forEach(it=>{
+    const ns = idx[it.id];
+    if(!ns) return;
+    ns.forEach(n=>{
+      const r = get(n);
+      r.ox.push({ it:it, kind: ns.length > 1 ? 'pair' : 'solo', self: /^cmp-/.test(it.id) });
+      seen[it.id] = 1;
+    });
+  });
+  // 출제기가 못 읽는 꼴이라도(본문에 다른 사람 이름이 끼는 경우 등) 이름으로 시작하면 그 사람 쪽에 모은다
+  const heads = [];
+  Object.keys(people).forEach(n=>{ Object.keys(people[n].aka).concat([n]).forEach(a=>{ if(a.length >= 2) heads.push([a, n]); }); });
+  heads.sort((a, b)=> b[0].length - a[0].length);
+  all.forEach(it=>{
+    if(seen[it.id]) return;
+    const h = heads.find(x=> it.text.indexOf(x[0]) === 0);
+    if(h) people[h[1]].ox.push({ it:it, kind:'solo', self: /^cmp-/.test(it.id) });
+  });
+  const unit = r=>{
+    let best = null, bn = -1;
+    Object.keys(r.topics).forEach(t=>{ if(r.topics[t] > bn){ bn = r.topics[t]; best = t; } });
+    const t = DATA.find(x=> x.id === best);
+    return t ? t.unit : (OX_TOPIC_EXTRA[best] ? OX_TOPIC_EXTRA[best].unit : '');
+  };
+  const list = Object.keys(people).map(n=>{ const r = people[n]; r.unit = unit(r); return r; })
+    .filter(r=> r.ps.length || r.ox.length || r.figs.length);
+  ARC_CACHE = { people:people, list:list };
+  return ARC_CACHE;
+}
+// 이 사람의 필기가 들어 있는 주제들 (제시문·곁들임이 있는 주제 먼저)
+function arcTopics(r){
+  const ids = Object.keys(r.topics).sort((a,b)=> r.topics[b] - r.topics[a]);
+  let strong = ids.filter(t=> r.topics[t] >= 1);
+  if(!strong.length) strong = ids;
+  return strong.map(t=> DATA.find(x=> x.id === t)).filter(Boolean).slice(0, 4);
+}
+// 검색: 이름 · 별칭 어디든 들어 있으면. 이름이 앞에서부터 맞는 것을 먼저
+function arcSearch(q){
+  q = (q || '').replace(/\s+/g, '').toLowerCase();
+  if(!q) return [];
+  const out = [];
+  arcIndex().list.forEach(r=>{
+    const keys = [r.name].concat(Object.keys(r.aka)).map(k=> k.replace(/\s+/g, '').toLowerCase());
+    let score = -1;
+    keys.forEach(k=>{
+      if(k === q) score = Math.max(score, 3);
+      else if(k.indexOf(q) === 0) score = Math.max(score, 2);
+      else if(k.indexOf(q) >= 0) score = Math.max(score, 1);
+    });
+    if(score >= 0) out.push({ r:r, score:score });
+  });
+  out.sort((a,b)=> b.score - a.score || (b.r.ps.length + b.r.ox.length) - (a.r.ps.length + a.r.ox.length));
+  return out.map(x=> x.r);
+}

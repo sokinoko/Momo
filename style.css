@@ -678,7 +678,7 @@ mark.ps-clue{
   background:none; border:none;
   padding:10px 2px 11px;
   display:flex; flex-direction:column; align-items:center; gap:4px;
-  font-size:10px; font-weight:600; color:var(--ink-faint);
+  font-size:9.5px; font-weight:600; color:var(--ink-faint); white-space:nowrap; letter-spacing:-.04em;
   cursor:pointer;
   border-top:2px solid transparent;
 }
@@ -1281,3 +1281,15 @@ mark.ps-clue{
   font-family:var(--font-note); font-size:10.5px; line-height:1.5;
   color:var(--gold); letter-spacing:-.2px; white-space:nowrap;
 }
+
+/* ---------- 사상가 아카이브 ---------- */
+.arc-tabs{ display:flex; gap:0; margin:12px 0 12px; border:1px solid var(--rule-strong); border-radius:9px; overflow:hidden; background:var(--panel); }
+.arc-tab{ flex:1; padding:10px 2px; background:none; border:none; border-left:1px solid var(--rule); font-size:12px; font-weight:700; color:var(--ink-soft); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.arc-tab:first-child{ border-left:none; }
+.arc-tab span{ font-size:10.5px; font-weight:600; color:var(--ink-faint); }
+.arc-tab.on{ background:var(--ink); color:var(--paper); }
+.arc-tab.on span{ color:var(--paper); opacity:.8; }
+.arc-chips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+.arc-chip{ padding:6px 11px; border:1px solid var(--rule-strong); border-radius:999px; background:var(--panel); font-size:12px; font-weight:700; color:var(--ink-soft); cursor:pointer; }
+.arc-chip.on{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+.arc-ox{ cursor:default; }

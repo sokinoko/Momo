@@ -19,6 +19,7 @@ function headerTitle(){
     oxSetup:['기출 OX','최신 기출 선지 O/X 판단'], oxQuiz:['기출 OX',''],
     psSetup:['제시문','제시문 보고 사상가 맞히기'], psQuiz:['제시문',''], tables:['비교표 모아보기','헷갈리는 개념 한눈에'],
     mock:['모의고사','자유 · 테마별 · 정형화'], mockExam:['모의고사',''], mockResult:['모의고사','채점 결과'],
+    archive:['아카이브','사상가별 선지 · 제시문 · 필기 · 흐름'],
     stats:['학습 통계','', ] };
   return map[NAV.view] || ['윤리와 사상 노트',''];
 }
@@ -42,6 +43,7 @@ function render(){
     case 'mock': html = renderMockSetup(); break;
     case 'mockExam': html = renderMockExam(); break;
     case 'mockResult': html = renderMockResult(); break;
+    case 'archive': html = renderArchive(); break;
     case 'stats': html = renderStats(); break;
     default: html = renderHome();
   }
@@ -98,6 +100,7 @@ function renderTabbar(){
     {v:'oxSetup', ic:'選', label:'기출OX'},
     {v:'mock', ic:'試', label:'모의고사'},
     {v:'tables', ic:'表', label:'비교표'},
+    {v:'archive', ic:'庫', label:'아카이브'},
     {v:'stats', ic:'計', label:'통계'},
   ];
   const activeSet = {
@@ -2519,3 +2522,154 @@ function resetAllData(){
 
 /* ---------- 초기 렌더 ---------- */
 document.addEventListener('DOMContentLoaded', ()=>{ if(NAV.view === 'home') advanceHeroKao(); render(); });
+
+
+/* ---------- 사상가 아카이브 ---------- */
+let arcDebounce = null;
+function arcInput(v){
+  NAV.arcQ = v; NAV.arcName = null;
+  clearTimeout(arcDebounce);
+  arcDebounce = setTimeout(()=>{ render(); const el = document.querySelector('.arc-search input'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }, 120);
+}
+function arcPick(enc){
+  NAV.arcName = decodeURIComponent(enc); NAV.arcTab = NAV.arcTab || 'ox';
+  NAV.arcLimit = { ps:12, ox:25 }; NAV.arcAns = 'all'; NAV.arcKind = 'all'; NAV.arcReveal = {};
+  render();
+  const sc = document.getElementById('scrollArea'); if(sc) sc.scrollTop = 0;
+  if(window.scrollTo) window.scrollTo(0, 0);
+}
+function arcBack(){ NAV.arcName = null; render(); }
+function arcSetTab(t){ NAV.arcTab = t; render(); }
+function arcMore(k){ NAV.arcLimit[k] += (k === 'ps' ? 12 : 25); render(); }
+function arcSetAns(v){ NAV.arcAns = v; NAV.arcLimit.ox = 25; render(); }
+function arcSetKind(v){ NAV.arcKind = v; NAV.arcLimit.ox = 25; render(); }
+function arcToggleHide(){ NAV.arcHide = !NAV.arcHide; NAV.arcReveal = {}; render(); }
+function arcReveal(id){ NAV.arcReveal = NAV.arcReveal || {}; NAV.arcReveal[id] = !NAV.arcReveal[id]; render(); }
+
+function arcPersonRow(r){
+  const u = r.unit ? `<span class="badge tag-${r.unit}"><span class="seal-ch">${UNIT_ICON[r.unit] || ''}</span>${UNIT_LABEL[r.unit] || r.unit}</span>` : '';
+  const aka = Object.keys(r.aka).filter(a=> a !== r.name).slice(0, 3).join(' · ');
+  return `<div class="hard-box topic-row" onclick="arcPick('${encodeURIComponent(r.name)}')">
+    <div class="info"><div class="tt">${r.name} ${u}</div>
+      <div class="ss">${(r.ps.length || r.ox.length) ? `제시문 ${r.ps.length} · 선지 ${r.ox.length}` : `필기 정리 ${r.figs.length}곳`}${aka ? ' · ' + aka : ''}</div></div>
+  </div>`;
+}
+
+function renderArchive(){
+  if(NAV.arcName) return renderArcDetail(NAV.arcName);
+  const q = NAV.arcQ || '';
+  const A = arcIndex();
+  let body;
+  if(q.trim()){
+    const hits = arcSearch(q);
+    body = hits.length ? hits.slice(0, 40).map(arcPersonRow).join('')
+      : `<div class="empty"><div class="ic">無</div>'${escHtml(q)}' 사상가를 찾지 못했어요</div>`;
+  } else {
+    body = UNIT_ORDER.map(u=>{
+      const list = A.list.filter(r=> r.unit === u).sort((a,b)=> a.name < b.name ? -1 : 1);
+      if(!list.length) return '';
+      return `<div class="section-title">${UNIT_ICON[u]} ${UNIT_LABEL[u]} <span class="note">(${list.length}명)</span></div>`
+        + list.map(arcPersonRow).join('');
+    }).join('');
+  }
+  return `<div class="screen">
+    <div class="search-box arc-search">
+      <input type="text" placeholder="사상가 이름 (예: 칸트, 양명, 하이에크)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
+    </div>
+    <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있어요.</div>
+    ${body}
+  </div>`;
+}
+
+function renderArcOxCard(x){
+  const it = x.it, hide = !!NAV.arcHide, open = !hide || (NAV.arcReveal && NAV.arcReveal[it.id]);
+  const mark = open ? `<span class="${it.answer === 'O' ? 'ox-ans-o' : 'ox-ans-x'}">${it.answer}</span>` : `<span class="note">?</span>`;
+  const tag = x.self ? `<span class="badge" style="color:var(--gold); border-color:var(--gold);">자체 제작</span>` : '';
+  const kind = x.kind === 'pair' ? `<span class="badge" style="color:var(--ink-soft); border-color:var(--rule-strong);">비교</span>` : '';
+  return `<div class="hard-box arc-ox" style="padding:13px 14px; margin-bottom:9px;" ${hide ? `onclick="arcReveal('${it.id}')"` : ''}>
+    <div class="ox-meta" style="margin-bottom:8px;">${mark}${kind}${tag}<span class="note">${escHtml(it.source || '')}</span></div>
+    <div class="ox-text" style="font-size:14.5px;">${escHtml(it.text)}</div>
+    ${open && it.answer === 'X' && it.fix ? `<div class="ox-fix" style="margin-top:10px; padding:9px 12px;"><div class="ox-fix-label">이렇게 고치면 맞는 선지</div><div class="ox-fix-text" style="font-size:13.5px;">${escHtml(it.fix)}</div></div>` : ''}
+    ${open && it.note ? `<div class="ox-note-box" style="padding:9px 12px;"><div class="ox-note-text" style="font-size:12.5px;">${escHtml(it.note)}</div></div>` : ''}
+  </div>`;
+}
+
+function renderArcDetail(name){
+  const r = arcIndex().people[name];
+  if(!r) return `<div class="screen"><button class="btn btn-ghost btn-sm" onclick="arcBack()">← 목록으로</button><div class="empty">사상가를 찾지 못했어요</div></div>`;
+  const topics = arcTopics(r);
+  const hasStory = topics.some(t=> t.story && t.story.length);
+  const tab = NAV.arcTab || 'ox';
+  const tabs = [
+    ['ox', '선지', r.ox.length], ['ps', '제시문', r.ps.length],
+    ['note', '개념 필기', topics.length], ['story', '흐름으로 읽기', hasStory ? topics.filter(t=> t.story).length : 0]
+  ];
+  const aka = Object.keys(r.aka).filter(a=> a !== r.name).join(' · ');
+  const u = r.unit ? `<span class="badge tag-${r.unit}"><span class="seal-ch">${UNIT_ICON[r.unit] || ''}</span>${UNIT_LABEL[r.unit] || r.unit}</span>` : '';
+  let body = '';
+  const lim = NAV.arcLimit || { ps:12, ox:25 };
+
+  if(tab === 'ox'){
+    let list = r.ox.slice();
+    const nO = list.filter(x=> x.it.answer === 'O').length, nX = list.length - nO;
+    const nS = list.filter(x=> x.self).length, nP = list.filter(x=> x.kind === 'pair').length;
+    if(NAV.arcAns === 'O') list = list.filter(x=> x.it.answer === 'O');
+    if(NAV.arcAns === 'X') list = list.filter(x=> x.it.answer === 'X');
+    if(NAV.arcKind === 'solo') list = list.filter(x=> x.kind === 'solo' && !x.self);
+    if(NAV.arcKind === 'pair') list = list.filter(x=> x.kind === 'pair');
+    if(NAV.arcKind === 'self') list = list.filter(x=> x.self);
+    const chip = (cur, v, label, fn)=> `<button class="arc-chip ${cur === v ? 'on' : ''}" onclick="${fn}('${v}')">${label}</button>`;
+    body = `<div class="arc-chips">
+        ${chip(NAV.arcAns || 'all', 'all', '전체 ' + r.ox.length, 'arcSetAns')}${chip(NAV.arcAns || 'all', 'O', 'O ' + nO, 'arcSetAns')}${chip(NAV.arcAns || 'all', 'X', 'X ' + nX, 'arcSetAns')}
+      </div>
+      <div class="arc-chips">
+        ${chip(NAV.arcKind || 'all', 'all', '모두', 'arcSetKind')}${chip(NAV.arcKind || 'all', 'solo', '기출 단독', 'arcSetKind')}${chip(NAV.arcKind || 'all', 'pair', '비교 ' + nP, 'arcSetKind')}${chip(NAV.arcKind || 'all', 'self', '자체 제작 ' + nS, 'arcSetKind')}
+      </div>
+      <label class="ox-check"><input type="checkbox" ${NAV.arcHide ? 'checked' : ''} onchange="arcToggleHide()"/> 정답·해설 가리기 <span class="note">(카드를 누르면 열려요)</span></label>
+      ${list.length ? list.slice(0, lim.ox).map(renderArcOxCard).join('') : '<div class="empty">조건에 맞는 선지가 없어요</div>'}
+      ${list.length > lim.ox ? `<button class="btn btn-block" onclick="arcMore('ox')">더 보기 (${list.length - lim.ox}개 남음)</button>` : ''}`;
+  } else if(tab === 'ps'){
+    const list = r.ps.slice().sort((a,b)=> String(b.source || '') < String(a.source || '') ? -1 : 1);
+    body = list.length ? list.slice(0, lim.ps).map(p=> `
+      <div class="hard-box" style="padding:13px 14px; margin-bottom:9px;">
+        <div class="ox-meta" style="margin-bottom:8px;"><b style="font-family:var(--font-serif);">${escHtml(p.name)}</b>${p.by ? `<span class="note">(${escHtml(p.by)})</span>` : ''}<span class="note">${escHtml(p.source || '')}</span></div>
+        <div class="ps-body" style="font-size:13px;">${highlightClues(p.text, p.clues)}</div>
+        ${(p.clues && p.clues.length) ? `<div class="note" style="margin-top:7px;">단서 · ${p.clues.map(c=> '「' + escHtml(c) + '」').join(' / ')}</div>` : ''}
+      </div>`).join('') + (list.length > lim.ps ? `<button class="btn btn-block" onclick="arcMore('ps')">더 보기 (${list.length - lim.ps}편 남음)</button>` : '')
+      : '<div class="empty">이 사상가의 제시문은 아직 없어요</div>';
+  } else if(tab === 'note'){
+    const figs = r.figs.map(x=> renderFigure(x.f)).join('');
+    body = (figs ? `<div class="hard-box" style="padding:14px;"><div class="fig-head">필기 속 정리</div>${figs}</div>` : '')
+      + (topics.length ? topics.map(t=> `
+      <div class="hard-box" style="padding:14px; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <b style="font-family:var(--font-serif); flex:1;">${t.title}</b><span class="note">${t.subtitle || ''}</span>
+          <button class="btn btn-sm" onclick="go('topicDetail',{topicId:'${t.id}'})">열기 →</button>
+        </div>
+        ${renderOutline(t, t.outline, 'outline', null)}
+        ${t.deep && t.deep.length ? `<div class="section-title" style="margin-top:12px;">심화 정리</div>${renderOutline(t, t.deep, 'deep', null)}` : ''}
+        ${t.table ? `<div style="margin-top:12px;">${renderTable(t.table, null)}</div>` : ''}
+      </div>`).join('') : '<div class="empty">이 사상가의 필기는 아직 없어요</div>');
+  } else {
+    const withStory = topics.filter(t=> t.story && t.story.length);
+    body = withStory.length ? withStory.map(t=> `
+      <div class="hard-box story-box" style="margin-bottom:12px;">
+        <div style="font-family:var(--font-serif); font-weight:700; margin-bottom:8px;">${t.title} <span class="note">${t.subtitle || ''}</span></div>
+        ${t.story.map(para=> `<p class="story-p">${renderStoryLine(para)}</p>`).join('')}
+      </div>`).join('') : '<div class="empty">이 사상가의 흐름으로 읽기 글은 아직 없어요</div>';
+  }
+
+  return `<div class="screen">
+    <button class="btn btn-ghost btn-sm" onclick="arcBack()">← 사상가 목록</button>
+    <div class="hard-box detail-head" style="margin-top:10px;">
+      ${u}
+      <h2>${r.name}</h2>
+      ${aka ? `<div class="ss">${aka}</div>` : ''}
+      <div class="ss" style="margin-top:4px;">선지 ${r.ox.length} · 제시문 ${r.ps.length} · 필기 주제 ${topics.length}</div>
+    </div>
+    <div class="arc-tabs">
+      ${tabs.map(t=> `<button class="arc-tab ${tab === t[0] ? 'on' : ''}" onclick="arcSetTab('${t[0]}')">${t[1]}<span>${t[2]}</span></button>`).join('')}
+    </div>
+    ${body}
+  </div>`;
+}
