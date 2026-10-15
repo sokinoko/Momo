@@ -1293,3 +1293,5 @@ mark.ps-clue{
 .arc-chip{ padding:6px 11px; border:1px solid var(--rule-strong); border-radius:999px; background:var(--panel); font-size:12px; font-weight:700; color:var(--ink-soft); cursor:pointer; }
 .arc-chip.on{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
 .arc-ox{ cursor:default; }
+
+.arc-hl{background:var(--gold-soft,rgba(200,160,60,.35));color:inherit;border-radius:2px;padding:0 1px;}
