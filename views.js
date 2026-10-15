@@ -2525,21 +2525,20 @@ document.addEventListener('DOMContentLoaded', ()=>{ if(NAV.view === 'home') adva
 
 
 /* ---------- 사상가 아카이브 ---------- */
-let arcDebounce = null;
+let arcDebounce = null, arcComposing = false;
+// 입력칸은 다시 그리지 않고 결과 영역만 바꾼다 (전체를 다시 그리면 한글 조합이 풀려 자모가 흩어진다)
 function arcInput(v){
   NAV.arcQ = v; NAV.arcName = null; NAV.arcKwLimit = 25;
   clearTimeout(arcDebounce);
-  arcDebounce = setTimeout(()=>{ render(); const el = document.querySelector('.arc-search input'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }, 120);
+  arcDebounce = setTimeout(arcRefreshBody, 150);
 }
-function arcPick(enc){
-  NAV.arcName = decodeURIComponent(enc); NAV.arcTab = NAV.arcTab || 'ox';
-  NAV.arcLimit = { ps:12, ox:25 }; NAV.arcAns = 'all'; NAV.arcKind = 'all'; NAV.arcReveal = {};
-  render();
-  const sc = document.getElementById('scrollArea'); if(sc) sc.scrollTop = 0;
-  if(window.scrollTo) window.scrollTo(0, 0);
+function arcRefreshBody(){
+  const el = document.getElementById('arc-body');
+  if(el) el.innerHTML = arcBodyHtml(NAV.arcQ || '');
+  else render();
 }
-function arcKwMore(){ NAV.arcKwLimit = (NAV.arcKwLimit || 25) + 25; render(); }
-function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; render(); }
+function arcKwMore(){ NAV.arcKwLimit = (NAV.arcKwLimit || 25) + 25; arcRefreshBody(); }
+function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; arcRefreshBody(); }
 function arcKwHits(q){
   const key = q.replace(/\s+/g, '').toLowerCase();
   if(!key) return [];
@@ -2562,8 +2561,8 @@ function arcSetTab(t){ NAV.arcTab = t; render(); }
 function arcMore(k){ NAV.arcLimit[k] += (k === 'ps' ? 12 : 25); render(); }
 function arcSetAns(v){ NAV.arcAns = v; NAV.arcLimit.ox = 25; render(); }
 function arcSetKind(v){ NAV.arcKind = v; NAV.arcLimit.ox = 25; render(); }
-function arcToggleHide(){ NAV.arcHide = !NAV.arcHide; NAV.arcReveal = {}; render(); }
-function arcReveal(id){ NAV.arcReveal = NAV.arcReveal || {}; NAV.arcReveal[id] = !NAV.arcReveal[id]; render(); }
+function arcToggleHide(){ NAV.arcHide = !NAV.arcHide; NAV.arcReveal = {}; NAV.arcName ? render() : arcRefreshBody(); }
+function arcReveal(id){ NAV.arcReveal = NAV.arcReveal || {}; NAV.arcReveal[id] = !NAV.arcReveal[id]; NAV.arcName ? render() : arcRefreshBody(); }
 
 function arcPersonRow(r){
   const u = r.unit ? `<span class="badge tag-${r.unit}"><span class="seal-ch">${UNIT_ICON[r.unit] || ''}</span>${UNIT_LABEL[r.unit] || r.unit}</span>` : '';
@@ -2574,9 +2573,7 @@ function arcPersonRow(r){
   </div>`;
 }
 
-function renderArchive(){
-  if(NAV.arcName) return renderArcDetail(NAV.arcName);
-  const q = NAV.arcQ || '';
+function arcBodyHtml(q){
   const A = arcIndex();
   let body;
   if(q.trim()){
@@ -2602,12 +2599,18 @@ function renderArchive(){
         + list.map(arcPersonRow).join('');
     }).join('');
   }
+  return body;
+}
+
+function renderArchive(){
+  if(NAV.arcName) return renderArcDetail(NAV.arcName);
+  const q = NAV.arcQ || '';
   return `<div class="screen">
     <div class="search-box arc-search">
       <input type="text" placeholder="사상가 이름 또는 선지 키워드 (예: 칸트, 양명, 정언 명령)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
     </div>
     <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있어요.</div>
-    ${body}
+    <div id="arc-body">${arcBodyHtml(q)}</div>
   </div>`;
 }
 
