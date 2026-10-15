@@ -2527,7 +2527,7 @@ document.addEventListener('DOMContentLoaded', ()=>{ if(NAV.view === 'home') adva
 /* ---------- 사상가 아카이브 ---------- */
 let arcDebounce = null;
 function arcInput(v){
-  NAV.arcQ = v; NAV.arcName = null;
+  NAV.arcQ = v; NAV.arcName = null; NAV.arcKwLimit = 25;
   clearTimeout(arcDebounce);
   arcDebounce = setTimeout(()=>{ render(); const el = document.querySelector('.arc-search input'); if(el){ el.focus(); el.setSelectionRange(v.length, v.length); } }, 120);
 }
@@ -2537,6 +2537,25 @@ function arcPick(enc){
   render();
   const sc = document.getElementById('scrollArea'); if(sc) sc.scrollTop = 0;
   if(window.scrollTo) window.scrollTo(0, 0);
+}
+function arcKwMore(){ NAV.arcKwLimit = (NAV.arcKwLimit || 25) + 25; render(); }
+function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; render(); }
+function arcKwHits(q){
+  const key = q.replace(/\s+/g, '').toLowerCase();
+  if(!key) return [];
+  return mockSourceItems().filter(it=> (it.text || '').replace(/\s+/g, '').toLowerCase().includes(key));
+}
+function arcHighlight(text, q){
+  const chars = Array.from(q.replace(/\s+/g, ''));
+  if(!chars.length) return escHtml(text);
+  const re = new RegExp(chars.map(c=> c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*'), 'gi');
+  let out = '', last = 0, m;
+  while((m = re.exec(text)) !== null){
+    if(!m[0].length){ re.lastIndex++; continue; }
+    out += escHtml(text.slice(last, m.index)) + '<mark class="arc-hl">' + escHtml(m[0]) + '</mark>';
+    last = m.index + m[0].length;
+  }
+  return out + escHtml(text.slice(last));
 }
 function arcBack(){ NAV.arcName = null; render(); }
 function arcSetTab(t){ NAV.arcTab = t; render(); }
@@ -2562,8 +2581,19 @@ function renderArchive(){
   let body;
   if(q.trim()){
     const hits = arcSearch(q);
-    body = hits.length ? hits.slice(0, 40).map(arcPersonRow).join('')
-      : `<div class="empty"><div class="ic">無</div>'${escHtml(q)}' 사상가를 찾지 못했어요</div>`;
+    let kw = arcKwHits(q);
+    const nO = kw.filter(it=> it.answer === 'O').length, nX = kw.length - nO;
+    const ans = NAV.arcKwAns || 'all';
+    if(ans !== 'all') kw = kw.filter(it=> it.answer === ans);
+    const lim = NAV.arcKwLimit || 25;
+    const chip = (cur, v, label)=> `<button class="arc-chip ${cur === v ? 'on' : ''}" onclick="arcSetKwAns('${v}')">${label}</button>`;
+    const pHtml = hits.length ? `<div class="section-title">사상가 <span class="note">(${hits.length}명)</span></div>` + hits.slice(0, 40).map(arcPersonRow).join('') : '';
+    const kHtml = (nO + nX) ? `<div class="section-title">선지에 '${escHtml(q.trim())}' 포함 <span class="note">(${nO + nX}개)</span></div>
+      <div class="arc-chips">${chip(ans, 'all', '전체 ' + (nO + nX))}${chip(ans, 'O', 'O ' + nO)}${chip(ans, 'X', 'X ' + nX)}</div>
+      <label class="ox-check"><input type="checkbox" ${NAV.arcHide ? 'checked' : ''} onchange="arcToggleHide()"/> 정답·해설 가리기 <span class="note">(카드를 누르면 열려요)</span></label>`
+      + kw.slice(0, lim).map(it=> renderArcOxCard({ it, self: /^cmp-/.test(it.id), kind: 'solo' }, q)).join('')
+      + (kw.length > lim ? `<button class="btn btn-block" onclick="arcKwMore()">더 보기 (${kw.length - lim}개 남음)</button>` : '') : '';
+    body = (pHtml + kHtml) || `<div class="empty"><div class="ic">無</div>'${escHtml(q)}' 사상가도 선지도 찾지 못했어요</div>`;
   } else {
     body = UNIT_ORDER.map(u=>{
       const list = A.list.filter(r=> r.unit === u).sort((a,b)=> a.name < b.name ? -1 : 1);
@@ -2574,21 +2604,21 @@ function renderArchive(){
   }
   return `<div class="screen">
     <div class="search-box arc-search">
-      <input type="text" placeholder="사상가 이름 (예: 칸트, 양명, 하이에크)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
+      <input type="text" placeholder="사상가 이름 또는 선지 키워드 (예: 칸트, 양명, 정언 명령)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
     </div>
     <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있어요.</div>
     ${body}
   </div>`;
 }
 
-function renderArcOxCard(x){
+function renderArcOxCard(x, hl){
   const it = x.it, hide = !!NAV.arcHide, open = !hide || (NAV.arcReveal && NAV.arcReveal[it.id]);
   const mark = open ? `<span class="${it.answer === 'O' ? 'ox-ans-o' : 'ox-ans-x'}">${it.answer}</span>` : `<span class="note">?</span>`;
   const tag = x.self ? `<span class="badge" style="color:var(--gold); border-color:var(--gold);">자체 제작</span>` : '';
   const kind = x.kind === 'pair' ? `<span class="badge" style="color:var(--ink-soft); border-color:var(--rule-strong);">비교</span>` : '';
   return `<div class="hard-box arc-ox" style="padding:13px 14px; margin-bottom:9px;" ${hide ? `onclick="arcReveal('${it.id}')"` : ''}>
     <div class="ox-meta" style="margin-bottom:8px;">${mark}${kind}${tag}<span class="note">${escHtml(it.source || '')}</span></div>
-    <div class="ox-text" style="font-size:14.5px;">${escHtml(it.text)}</div>
+    <div class="ox-text" style="font-size:14.5px;">${hl ? arcHighlight(it.text, hl) : escHtml(it.text)}</div>
     ${open && it.answer === 'X' && it.fix ? `<div class="ox-fix" style="margin-top:10px; padding:9px 12px;"><div class="ox-fix-label">이렇게 고치면 맞는 선지</div><div class="ox-fix-text" style="font-size:13.5px;">${escHtml(it.fix)}</div></div>` : ''}
     ${open && it.note ? `<div class="ox-note-box" style="padding:9px 12px;"><div class="ox-note-text" style="font-size:12.5px;">${escHtml(it.note)}</div></div>` : ''}
   </div>`;
