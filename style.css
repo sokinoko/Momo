@@ -1295,3 +1295,5 @@ mark.ps-clue{
 .arc-ox{ cursor:default; }
 
 .arc-hl{background:var(--gold-soft,rgba(200,160,60,.35));color:inherit;border-radius:2px;padding:0 1px;}
+
+.mock-rv.wrong{ border-left:5px solid var(--red); }

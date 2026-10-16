@@ -1086,8 +1086,19 @@ const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'�
                           box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조',
                           trioVenn:'3중 벤다이어그램', critique:'서로에 대한 비판' };
 // 기출이 아니라 우리가 만든 선지라는 표시. 채점 해설에서 늘 보인다
+// 선지의 출처 이름. 문항에 src가 없으면 원본 선지(id)에서 찾는다
+function mockSrcOf(it){
+  if(!it) return '';
+  if(it.src) return it.src;
+  const o = it.id ? mockItemById(it.id) : null;
+  return (o && o.source) || '';
+}
+function mockSrcLine(it){
+  const s = mockSrcOf(it);
+  return (s && s !== '자체 제작') ? `<div class="note" style="margin-top:3px;">${escHtml(s)}</div>` : '';
+}
 function mockMineTag(it){
-  return (it && it.src === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
+  return (it && mockSrcOf(it) === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
 }
 // 자체 제작 선지가 근거로 삼은 원전 한 줄. 기출이 아니라 어디서 왔는지 보이게 한다
 function mockSrcNote(it){
@@ -1111,8 +1122,15 @@ function mockStarBtn(id){
 }
 function mockJump(i){
   const el = document.getElementById('mockrv-' + i);
-  if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  if(el){ el.scrollIntoView({ behavior:'smooth', block:'start' }); return; }
+  // '틀린 것만 보기' 중에 맞힌 문항으로 오면 전체 해설로 돌려서 보여 준다
+  if(NAV.mockRvOnly){
+    NAV.mockRvOnly = false; render();
+    const e2 = document.getElementById('mockrv-' + i);
+    if(e2) e2.scrollIntoView({ block:'start' });
+  }
 }
+function mockSetRvOnly(v){ NAV.mockRvOnly = !!v; render(); }
 
 /* ---------- 시작 화면 ---------- */
 /* 시험 시작 전 설정 카드 — 방식 셋(자유 · 테마별 · 정형화)과 방식별 선택 */
@@ -1364,8 +1382,9 @@ function renderMockResult(){
   const slips = mockMismatch(run);
   // 시험지 표시대로 옮겼다면 맞았을 문항
   const lost = slips.filter(i=> run.picks[i] === set[i].ans);
+  // 해설은 맞힌 문항까지 전부 싣는다. '틀린 것만 보기'를 켜면 틀림·찍음만 남긴다
   const showIdx = [];
-  set.forEach((q,i)=>{ if(mockAns(run, i) !== q.ans || run.guess[i]) showIdx.push(i); });
+  set.forEach((q,i)=>{ if(!NAV.mockRvOnly || mockAns(run, i) !== q.ans || run.guess[i]) showIdx.push(i); });
   const mine = mockMineItems(set);
   const nWrong = set.filter((q,i)=> mockAns(run, i) !== q.ans).length;
   const nGuess = set.filter((q,i)=> run.guess[i]).length;
@@ -1426,8 +1445,12 @@ function renderMockResult(){
         </div>`).join('')}
       </div>` : ''}
 
-    ${showIdx.length ? `<div class="section-title">다시 볼 문항 ${showIdx.length}개 <span class="note" style="font-weight:400;">틀림 ${nWrong} · 찍음 ${nGuess}</span></div>` : `
-      <div class="hard-box" style="text-align:center; padding:18px;"><b style="font-size:16px;">전부 맞혔어요</b></div>`}
+    <div class="section-title">전체 해설 ${set.length}문항 <span class="note" style="font-weight:400;">틀림 ${nWrong} · 찍음 ${nGuess}</span></div>
+    <div class="arc-chips" style="margin-bottom:10px;">
+      <button class="arc-chip ${NAV.mockRvOnly ? '' : 'on'}" onclick="mockSetRvOnly(false)">전체 ${set.length}</button>
+      <button class="arc-chip ${NAV.mockRvOnly ? 'on' : ''}" onclick="mockSetRvOnly(true)">틀린 · 찍은 것만 ${nWrong + set.filter((q,i)=> run.guess[i] && mockAns(run, i) === q.ans).length}</button>
+    </div>
+    ${(!showIdx.length) ? `<div class="hard-box" style="text-align:center; padding:18px;"><b style="font-size:16px;">전부 맞혔어요</b></div>` : ''}
 
     ${showIdx.map(i=> renderMockReview(set[i], i, run)).join('')}
   </div>`;
@@ -1442,7 +1465,7 @@ function renderMockReview(q, i, run){
   const guessed = !!run.guess[i];
   const boxType = !!MOCK_BOXY[q.type];
   const tags = `
-    ${ok ? `<span class="mock-tag ok">찍어서 맞힘</span>` : (blank ? `<span class="mock-tag">안 고름</span>` : `<span class="mock-tag no">틀림</span>`)}
+    ${ok ? `<span class="mock-tag ok">${guessed ? '찍어서 맞힘' : '정답'}</span>` : (blank ? `<span class="mock-tag">안 고름</span>` : `<span class="mock-tag no">틀림</span>`)}
     ${guessed && !ok ? `<span class="mock-tag">찍음</span>` : ''}
     ${slip ? `<span class="mock-tag no">마킹 실수</span>` : ''}
     ${run.per[i] ? `<span class="mock-rv-time">${mockFmtDur(run.per[i])}</span>` : ''}`;
@@ -1459,6 +1482,7 @@ function renderMockReview(q, i, run){
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
             ${mockSrcNote(it)}
+            ${mockSrcLine(it)}
             ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
             ${it.verdict?`<div class="mock-rv-verdict ${it.ok?'t':'f'}">${escHtml(it.verdict)}</div>`:''}
           </span>
@@ -1475,8 +1499,8 @@ function renderMockReview(q, i, run){
       ${q.choices.map((c,ci)=>{
         const isAns = ci === q.ans, isMine = ci === picked;
         const truth = mockChoiceTruth(q, ci);
-        // 틀렸거나 안 고른 문항은 고르지 않은 선지까지 전부 푼다
-        const open = !ok || isAns || isMine;
+        // 맞힌 문항도 모든 선지의 해설을 푼다
+        const open = true;
         let notes = '';
         if(open){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;
@@ -1492,7 +1516,7 @@ function renderMockReview(q, i, run){
             ${(isAns || isMine || (slip && ci === pen)) ? `<div class="lb">${[isAns?'정답':'', isMine?'OMR 마킹':'', (slip && ci === pen)?'시험지 표시':''].filter(Boolean).join(' · ')}</div>` : ''}
             <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockMineTag(c)}</div>
             ${notes}
-            ${open && c.src && c.src !== '자체 제작' ? `<div class="note" style="margin-top:3px;">${escHtml(c.src)}</div>` : ''}
+            ${open ? mockSrcLine(c) : ''}
           </div>
         </div>`;
       }).join('')}
@@ -1500,7 +1524,7 @@ function renderMockReview(q, i, run){
     ${blank ? `<div class="note" style="margin-top:9px;">OMR에 마킹하지 않은 문항이에요</div>` : ''}`;
   }
 
-  return `<div class="hard-box mock-rv" id="mockrv-${i}">
+  return `<div class="hard-box mock-rv ${ok ? '' : 'wrong'}" id="mockrv-${i}">
     <div class="mock-rv-head">
       <span class="mock-no ${ok?'':'no'}">${i+1}</span>
       <b class="mock-rv-name">${mockQName(q)}</b>
