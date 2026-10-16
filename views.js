@@ -2537,6 +2537,13 @@ function arcRefreshBody(){
   if(el) el.innerHTML = arcBodyHtml(NAV.arcQ || '');
   else render();
 }
+function arcPick(enc){
+  NAV.arcName = decodeURIComponent(enc); NAV.arcTab = NAV.arcTab || 'ox';
+  NAV.arcLimit = { ps:12, ox:25 }; NAV.arcAns = 'all'; NAV.arcKind = 'all'; NAV.arcReveal = {};
+  render();
+  const sc = document.getElementById('scrollArea'); if(sc) sc.scrollTop = 0;
+  if(window.scrollTo) window.scrollTo(0, 0);
+}
 function arcKwMore(){ NAV.arcKwLimit = (NAV.arcKwLimit || 25) + 25; arcRefreshBody(); }
 function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; arcRefreshBody(); }
 function arcKwHits(q){
@@ -2615,6 +2622,7 @@ function renderArchive(){
 }
 
 function renderArcOxCard(x, hl){
+  if(typeof hl !== 'string') hl = '';
   const it = x.it, hide = !!NAV.arcHide, open = !hide || (NAV.arcReveal && NAV.arcReveal[it.id]);
   const mark = open ? `<span class="${it.answer === 'O' ? 'ox-ans-o' : 'ox-ans-x'}">${it.answer}</span>` : `<span class="note">?</span>`;
   const tag = x.self ? `<span class="badge" style="color:var(--gold); border-color:var(--gold);">자체 제작</span>` : '';
@@ -2659,7 +2667,7 @@ function renderArcDetail(name){
         ${chip(NAV.arcKind || 'all', 'all', '모두', 'arcSetKind')}${chip(NAV.arcKind || 'all', 'solo', '기출 단독', 'arcSetKind')}${chip(NAV.arcKind || 'all', 'pair', '비교 ' + nP, 'arcSetKind')}${chip(NAV.arcKind || 'all', 'self', '자체 제작 ' + nS, 'arcSetKind')}
       </div>
       <label class="ox-check"><input type="checkbox" ${NAV.arcHide ? 'checked' : ''} onchange="arcToggleHide()"/> 정답·해설 가리기 <span class="note">(카드를 누르면 열려요)</span></label>
-      ${list.length ? list.slice(0, lim.ox).map(renderArcOxCard).join('') : '<div class="empty">조건에 맞는 선지가 없어요</div>'}
+      ${list.length ? list.slice(0, lim.ox).map(x=> renderArcOxCard(x)).join('') : '<div class="empty">조건에 맞는 선지가 없어요</div>'}
       ${list.length > lim.ox ? `<button class="btn btn-block" onclick="arcMore('ox')">더 보기 (${list.length - lim.ox}개 남음)</button>` : ''}`;
   } else if(tab === 'ps'){
     const list = r.ps.slice().sort((a,b)=> String(b.source || '') < String(a.source || '') ? -1 : 1);
