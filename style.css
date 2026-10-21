@@ -1297,3 +1297,8 @@ mark.ps-clue{
 .arc-hl{background:var(--gold-soft,rgba(200,160,60,.35));color:inherit;border-radius:2px;padding:0 1px;}
 
 .mock-rv.wrong{ border-left:5px solid var(--red); }
+
+.mock-ps-src{ display:block; margin-top:6px; font-family:var(--font-sans,inherit); font-size:11px; color:var(--ink-faint); letter-spacing:0; }
+
+.mock-ps-tag{ display:inline-block; margin:0 0 5px; padding:2px 9px; border:1px solid var(--rule-strong); border-radius:5px; background:var(--paper-alt); font-family:var(--font-sans,inherit); font-size:11px; color:var(--ink-soft); letter-spacing:0; }
+.mock-ps-tag span{ color:var(--gold); font-weight:700; margin-right:6px; }

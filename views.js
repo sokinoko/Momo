@@ -916,7 +916,7 @@ function mockPsSrcLabel(p){
   let m = /^(\d{4})-(\d{2})(?:-\d+)?$/.exec(s);
   if(m){ const k = { '03':'3교', '04':'4교', '05':'5교', '06':'6평', '07':'7교', '09':'9평', '10':'10교', '11':'수능' }[m[2]]; return m[1] + ' ' + (k || m[2] + '월'); }
   m = /^(\d{4})-(수특|수완)-(\d+)(?:-\d+)?$/.exec(s);
-  if(m) return m[1] + ' ' + m[2] + ' ' + m[3];
+  if(m) return m[1] + ' ' + m[2] + ' p.' + m[3];
   return s.replace(/-\d+$/, '');
 }
 window.mockPsSrcFn = function(p){
@@ -924,19 +924,24 @@ window.mockPsSrcFn = function(p){
   return l ? `<span class="mock-ps-src">출처 · ${escHtml(l)}</span>` : '';
 }
 function mockPsBox(q, withSrc){
-  const mockPsSrc = withSrc ? window.mockPsSrcFn : (()=> '');
+  // 출처는 제시문 박스 위에 작은 태그로 — 복수 제시문이면 한 줄에 라벨과 함께
+  const tag = (list)=>{
+    if(!withSrc) return '';
+    const parts = list.map(([lb, p])=>{ const l = mockPsSrcLabel(p); return l ? (lb ? lb + ' ' : '') + escHtml(l) : ''; }).filter(Boolean);
+    return parts.length ? `<div class="mock-ps-tag"><span>출처</span>${parts.join(' · ')}</div>` : '';
+  };
   if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique'){
-    return `<div class="mock-ps mock-ps-pair">
-      ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}${mockPsSrc(p)}</span></div>`).join('')}
+    return tag(q.psList.map((p,i)=> [MOCK_TRIO_LB[i], p])) + `<div class="mock-ps mock-ps-pair">
+      ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}</span></div>`).join('')}
     </div>`;
   }
   if(q.type === 'venn' || q.type === 'box' || q.type === 'pair' || q.type === 'algo'){
-    return `<div class="mock-ps mock-ps-pair">
-      <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}${mockPsSrc(q.psA)}</span></div>
-      <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}${mockPsSrc(q.psB)}</span></div>
+    return tag([[q.L1||'갑', q.psA], [q.L2||'을', q.psB]]) + `<div class="mock-ps mock-ps-pair">
+      <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}</span></div>
+      <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}</span></div>
     </div>`;
   }
-  return `<div class="mock-ps">${escHtml(q.ps.text)}${mockPsSrc(q.ps)}</div>`;
+  return tag([['', q.ps]]) + `<div class="mock-ps">${escHtml(q.ps.text)}</div>`;
 }
 function mockFigFor(q){
   if(q.type === 'venn') return mockVennFig();
@@ -2673,6 +2678,7 @@ function renderArcOxCard(x, hl){
     <div class="ox-text" style="font-size:14.5px;">${hl ? arcHighlight(it.text, hl) : escHtml(it.text)}</div>
     ${open && it.answer === 'X' && it.fix ? `<div class="ox-fix" style="margin-top:10px; padding:9px 12px;"><div class="ox-fix-label">이렇게 고치면 맞는 선지</div><div class="ox-fix-text" style="font-size:13.5px;">${escHtml(it.fix)}</div></div>` : ''}
     ${open && it.note ? `<div class="ox-note-box" style="padding:9px 12px;"><div class="ox-note-text" style="font-size:12.5px;">${escHtml(it.note)}</div></div>` : ''}
+    ${open && it.same && it.same.length ? `<div class="ox-same" style="padding:9px 12px;"><div class="ox-same-label">같은 말을 바꿔 쓴 선지</div><ul class="ox-same-list" style="font-size:13px;">${it.same.map(s=> `<li>${escHtml(s)}</li>`).join('')}</ul></div>` : ''}
   </div>`;
 }
 
