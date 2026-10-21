@@ -908,19 +908,35 @@ function mockStemText(q){
   return '다음을 주장한 ' + era + ' 사상가의 입장으로 ' + tail;
 }
 // 제시문 박스 — 갑·을이면 두 편을 라벨과 함께 보여 준다
-function mockPsBox(q){
+// 제시문 출처 이름 — '2026-09' → '2026 9평', '2026-수특-88' → '2026 수특 88'
+function mockPsSrcLabel(p){
+  let s = (p && p.source) || '';
+  if(!s && p && p.id && typeof PASSAGES !== 'undefined'){ const o = PASSAGES.filter(x=> x.id === p.id)[0]; s = (o && o.source) || ''; }
+  if(!s) return '';
+  let m = /^(\d{4})-(\d{2})(?:-\d+)?$/.exec(s);
+  if(m){ const k = { '03':'3교', '04':'4교', '05':'5교', '06':'6평', '07':'7교', '09':'9평', '10':'10교', '11':'수능' }[m[2]]; return m[1] + ' ' + (k || m[2] + '월'); }
+  m = /^(\d{4})-(수특|수완)-(\d+)(?:-\d+)?$/.exec(s);
+  if(m) return m[1] + ' ' + m[2] + ' ' + m[3];
+  return s.replace(/-\d+$/, '');
+}
+window.mockPsSrcFn = function(p){
+  const l = mockPsSrcLabel(p);
+  return l ? `<span class="mock-ps-src">출처 · ${escHtml(l)}</span>` : '';
+}
+function mockPsBox(q, withSrc){
+  const mockPsSrc = withSrc ? window.mockPsSrcFn : (()=> '');
   if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique'){
     return `<div class="mock-ps mock-ps-pair">
-      ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}</span></div>`).join('')}
+      ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}${mockPsSrc(p)}</span></div>`).join('')}
     </div>`;
   }
   if(q.type === 'venn' || q.type === 'box' || q.type === 'pair' || q.type === 'algo'){
     return `<div class="mock-ps mock-ps-pair">
-      <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}</span></div>
-      <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}</span></div>
+      <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}${mockPsSrc(q.psA)}</span></div>
+      <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}${mockPsSrc(q.psB)}</span></div>
     </div>`;
   }
-  return `<div class="mock-ps">${escHtml(q.ps.text)}</div>`;
+  return `<div class="mock-ps">${escHtml(q.ps.text)}${mockPsSrc(q.ps)}</div>`;
 }
 function mockFigFor(q){
   if(q.type === 'venn') return mockVennFig();
@@ -1531,7 +1547,7 @@ function renderMockReview(q, i, run){
       <span class="note">${MOCK_TYPE_LABEL[q.type]||''}</span>
       <span class="mock-rv-tags">${tags}</span>
     </div>
-    ${mockPsBox(q)}
+    ${mockPsBox(q, true)}
     ${mockFigFor(q)}
     ${body}
   </div>`;
@@ -2573,7 +2589,8 @@ function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; arcRefreshBody()
 function arcKwHits(q){
   const key = q.replace(/\s+/g, '').toLowerCase();
   if(!key) return [];
-  return mockSourceItems().filter(it=> (it.text || '').replace(/\s+/g, '').toLowerCase().includes(key));
+  return mockSourceItems().filter(it=> (it.text || '').replace(/\s+/g, '').toLowerCase().includes(key)
+    || (it.source || '').replace(/\s+|p\./gi, '').toLowerCase().includes(key.replace(/p\./g, '')));
 }
 function arcHighlight(text, q){
   const chars = Array.from(q.replace(/\s+/g, ''));
@@ -2616,7 +2633,7 @@ function arcBodyHtml(q){
     const lim = NAV.arcKwLimit || 25;
     const chip = (cur, v, label)=> `<button class="arc-chip ${cur === v ? 'on' : ''}" onclick="arcSetKwAns('${v}')">${label}</button>`;
     const pHtml = hits.length ? `<div class="section-title">사상가 <span class="note">(${hits.length}명)</span></div>` + hits.slice(0, 40).map(arcPersonRow).join('') : '';
-    const kHtml = (nO + nX) ? `<div class="section-title">선지에 '${escHtml(q.trim())}' 포함 <span class="note">(${nO + nX}개)</span></div>
+    const kHtml = (nO + nX) ? `<div class="section-title">선지·출처에 '${escHtml(q.trim())}' 포함 <span class="note">(${nO + nX}개)</span></div>
       <div class="arc-chips">${chip(ans, 'all', '전체 ' + (nO + nX))}${chip(ans, 'O', 'O ' + nO)}${chip(ans, 'X', 'X ' + nX)}</div>
       <label class="ox-check"><input type="checkbox" ${NAV.arcHide ? 'checked' : ''} onchange="arcToggleHide()"/> 정답·해설 가리기 <span class="note">(카드를 누르면 열려요)</span></label>`
       + kw.slice(0, lim).map(it=> renderArcOxCard({ it, self: /^cmp-/.test(it.id), kind: 'solo' }, q)).join('')
@@ -2638,7 +2655,7 @@ function renderArchive(){
   const q = NAV.arcQ || '';
   return `<div class="screen">
     <div class="search-box arc-search">
-      <input type="text" placeholder="사상가 이름 또는 선지 키워드 (예: 칸트, 양명, 정언 명령)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
+      <input type="text" placeholder="사상가 · 선지 키워드 · 출처 (예: 칸트, 정언 명령, 2027 10교)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
     </div>
     <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있어요.</div>
     <div id="arc-body">${arcBodyHtml(q)}</div>
@@ -2652,7 +2669,7 @@ function renderArcOxCard(x, hl){
   const tag = x.self ? `<span class="badge" style="color:var(--gold); border-color:var(--gold);">자체 제작</span>` : '';
   const kind = x.kind === 'pair' ? `<span class="badge" style="color:var(--ink-soft); border-color:var(--rule-strong);">비교</span>` : '';
   return `<div class="hard-box arc-ox" style="padding:13px 14px; margin-bottom:9px;" ${hide ? `onclick="arcReveal('${it.id}')"` : ''}>
-    <div class="ox-meta" style="margin-bottom:8px;">${mark}${kind}${tag}<span class="note">${escHtml(it.source || '')}</span></div>
+    <div class="ox-meta" style="margin-bottom:8px;">${mark}${kind}${tag}<span class="note">${hl ? arcHighlight(it.source || '', hl) : escHtml(it.source || '')}</span></div>
     <div class="ox-text" style="font-size:14.5px;">${hl ? arcHighlight(it.text, hl) : escHtml(it.text)}</div>
     ${open && it.answer === 'X' && it.fix ? `<div class="ox-fix" style="margin-top:10px; padding:9px 12px;"><div class="ox-fix-label">이렇게 고치면 맞는 선지</div><div class="ox-fix-text" style="font-size:13.5px;">${escHtml(it.fix)}</div></div>` : ''}
     ${open && it.note ? `<div class="ox-note-box" style="padding:9px 12px;"><div class="ox-note-text" style="font-size:12.5px;">${escHtml(it.note)}</div></div>` : ''}
