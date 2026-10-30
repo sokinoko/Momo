@@ -1239,6 +1239,32 @@ function mockSrcLine(it){
 function mockMineTag(it){
   return (it && mockSrcOf(it) === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
 }
+/* 선지 본문 맨 앞에 적힌 이름을 그대로 읽는다 — 「A와 B는 모두」면 둘 다 */
+function mockRawNames(text){
+  const names = mockNameList();
+  const out = [];
+  let rest = text;
+  for(let k=0;k<2;k++){
+    let hit = '';
+    for(let i=0;i<names.length;i++){ if(rest.indexOf(names[i]) === 0){ hit = names[i]; break; } }
+    if(!hit) break;
+    out.push(hit);
+    rest = rest.slice(hit.length);
+    if(rest[0] === '와' || rest[0] === '과') rest = rest.slice(1).replace(/^\s+/, '');
+    else break;
+  }
+  return out;
+}
+/* 범주·별칭으로 묶인 선지는 문항 이름표가 범주라서 누가 한 말인지 안 보인다.
+   공화주의 문항의 페팃·키케로, 스토아학파의 에픽테토스, 왕수인의 양명, 자유주의의 밀 —
+   그럴 때만 선지 옆에 실제 이름을 달아 준다. 본이름 그대로인 선지에는 안 붙인다. */
+function mockWhoTag(it){
+  if(!it || !it.id) return '';
+  const o = (typeof mockItemById === 'function') ? mockItemById(it.id) : null;
+  if(!o || !o.text) return '';
+  const raw = mockRawNames(o.text).filter(n=> mockCanon(n, o.topics || []) !== n);
+  return raw.length ? `<span class="mock-who">${escHtml(raw.join(' · '))}</span>` : '';
+}
 // 자체 제작 선지가 근거로 삼은 원전 한 줄. 기출이 아니라 어디서 왔는지 보이게 한다
 function mockSrcNote(it){
   if(!it || !it.quote) return '';
@@ -1618,7 +1644,7 @@ function renderMockReview(q, i, run){
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
           <span class="tx">${escHtml(it.body)}
-            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${mockSrcNote(it)}
             ${mockSrcLine(it)}
@@ -1637,7 +1663,7 @@ function renderMockReview(q, i, run){
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
           <span class="tx">${(it.zone || it.label) ? `<b class="mock-lb">${it.zone?it.zone:it.label} :</b> ` : ''}${escHtml(it.body)}
-            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
             ${mockSrcNote(it)}
@@ -1673,7 +1699,7 @@ function renderMockReview(q, i, run){
           <span class="mk">${MOCK_MARK[ci]}</span>
           <div class="tx">
             ${(isAns || isMine || (slip && ci === pen)) ? `<div class="lb">${[isAns?'정답':'', isMine?'OMR 마킹':'', (slip && ci === pen)?'시험지 표시':''].filter(Boolean).join(' · ')}</div>` : ''}
-            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockMineTag(c)}</div>
+            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockWhoTag(c)}${mockMineTag(c)}</div>
             ${notes}
             ${open ? mockSrcLine(c) : ''}
           </div>
