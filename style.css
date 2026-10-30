@@ -1302,3 +1302,16 @@ mark.ps-clue{
 
 .mock-ps-tag{ display:inline-block; margin:0 0 5px; padding:2px 9px; border:1px solid var(--rule-strong); border-radius:5px; background:var(--paper-alt); font-family:var(--font-sans,inherit); font-size:11px; color:var(--ink-soft); letter-spacing:0; }
 .mock-ps-tag span{ color:var(--gold); font-weight:700; margin-right:6px; }
+
+/* 학생 체크표 (모의고사 「관점에만 모두 ✓ 를 표시한 학생은?」) */
+.mock-check{ width:100%; border-collapse:collapse; margin:12px 0 4px;
+  font-family:var(--font-exam); font-size:13px; line-height:1.5; color:var(--ink); }
+.mock-check th, .mock-check td{ border:1px solid var(--rule-strong); padding:6px 3px; text-align:center; }
+.mock-check thead th{ font-weight:700; background:var(--paper-alt); white-space:nowrap; }
+.mock-check th.h{ text-align:left; }
+.mock-check td.st{ text-align:left; }
+.mock-check td.st .n{ display:inline-block; min-width:1.1em; color:var(--ink-soft); margin-right:3px; }
+/* 학생 칸은 체크 하나만 들어가므로 좁게 — 남는 폭을 입장 칸이 가져간다 */
+.mock-check{ table-layout:fixed; }
+.mock-check thead th:not(.h), .mock-check tbody td:not(.st){ width:1.75em; font-weight:700; }
+.mock-check td.st{ padding:6px 6px; }
