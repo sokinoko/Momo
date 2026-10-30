@@ -717,7 +717,11 @@ function setMockSize(n){
   render();
 }
 // 유형 비율. 남는 몫이 pair(갑·을 5지선다)
-const MOCK_MIX = { right:0.26, wrong:0.18, box:0.15, venn:0.05, algo:0.05, trio:0.06, critique:0.05 };
+/* 유형 추첨 가중치. 나머지(합이 1에 모자란 몫)는 갑·을 문항이 가져간다.
+   질문형 넷과 3중 순서도는 할당(쿼터)을 주지 않고 이 추첨으로만 나온다 —
+   자리를 따로 떼 두면 단독·갑을이 그만큼 밀려나기 때문이다. */
+const MOCK_MIX = { right:0.20, wrong:0.14, box:0.13, venn:0.05, algo:0.04, trio:0.06, critique:0.05,
+                   qsolo:0.05, qpair:0.04, qbox:0.03, check:0.04, trioAlgo:0.04 };
 
 let MOCK_CACHE = null;
 
@@ -852,7 +856,7 @@ function mockSourceItems(){
 
 function mockPool(){
   if(MOCK_CACHE) return MOCK_CACHE;
-  MOCK_TRIO_CACHE = null;
+  MOCK_TRIO_CACHE = null; MOCK_BODY_CACHE = null; MOCK_DUO_CACHE = null;
   const names = mockNameList();
   const byName = {}, pairs = {}, diffs = {};
 
@@ -982,8 +986,11 @@ function mockTrioReady(){
    나머지는 지금까지처럼 무작위로 채우므로 실제 문항 수는 이보다 많을 수 있다.
    재료가 모자라면 그만큼만 넣는다. */
 function mockQuotaOf(){ return mockSizeOf(mockSetN()).quota; }
-// 벤 한 자리를 3중으로 먼저 채워 볼 확률. 나머지는 2중부터 본다
+// 벤·순서도 한 자리를 3중으로 먼저 채워 볼 확률. 나머지는 2중부터 본다.
+// 순서도 쪽을 낮게 둔 것은 늘 3중을 먼저 보면 2중 순서도가 시험지에서 사라지기 때문이다
 const MOCK_TRIO_VENN_RATE = 0.55;
+const MOCK_TRIO_ALGO_RATE = 0.35;
+const MOCK_TRIO_PERM = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
 function mockQuotaPick(r, rng){ return r[0] + Math.floor(rng() * (r[1] - r[0] + 1)); }
 
 function buildMockQuota(pool, rng, used, qs){
@@ -1003,8 +1010,26 @@ function buildMockQuota(pool, rng, used, qs){
     return null;
   };
 
+  // 순서도 — 벤과 마찬가지로 3중과 2중 가운데 어느 쪽을 먼저 볼지 세트마다 뽑는다.
+  // 3중 순서도는 자리를 따로 받지 않고 이 몫 안에서 2중과 자리를 나눠 갖는다
+  const triosA = shuffleSeeded(mockTrioReady(), rng);
+  let ai = 0;
+  const takeTrioAlgo = ()=>{
+    for(; ai<triosA.length; ai++){
+      const t = triosA[ai];
+      if(t.some(n=> used[n] || !pool.byName[n] || mockSoloOnly(n))) continue;
+      const ord = shuffleSeeded(MOCK_TRIO_PERM, rng);
+      for(let j=0;j<ord.length;j++){
+        const q = buildTrioAlgoQ(t[ord[j][0]], t[ord[j][1]], t[ord[j][2]], mockMainUnit(t[0]), rng, null);
+        if(q){ t.forEach(n=> used[n] = 1); ai++; return q; }
+      }
+    }
+    return null;
+  };
+  const takeDuoAlgo = ()=> takePair((a,b)=> buildAlgoQ(a, b, mockMainUnit(a), rng, null));
   for(let k=0;k<wantAlgo;k++){
-    const q = takePair((a,b)=> buildAlgoQ(a, b, mockMainUnit(a), rng, null));
+    const trioFirst = rng() < MOCK_TRIO_ALGO_RATE;
+    const q = trioFirst ? (takeTrioAlgo() || takeDuoAlgo()) : (takeDuoAlgo() || takeTrioAlgo());
     if(!q) break;
     qs.push(q);
   }
@@ -1036,7 +1061,7 @@ function buildMockQuota(pool, rng, used, qs){
 /* 순서도·벤다이어그램처럼 그림이 들어가는 문항이 한곳에 몰리면 시험지가 이상해진다.
    다 만든 뒤에 고르게 흩어 놓는다. 자리만 바꾸는 것이라 뽑히는 문제는 그대로고,
    rng 를 맨 마지막에 쓰므로 같은 날·같은 세트면 자리도 똑같다. */
-const MOCK_SPREAD_TYPES = { algo:1, venn:1, trioVenn:1, critique:1 };
+const MOCK_SPREAD_TYPES = { algo:1, venn:1, trioVenn:1, critique:1, trioAlgo:1 };
 function mockSpread(qs, rng){
   const figRaw = [], rest = [];
   qs.forEach(q=> (MOCK_SPREAD_TYPES[q.type] ? figRaw : rest).push(q));
@@ -1110,7 +1135,8 @@ function buildMockSet(){
     const must = mockMustList().indexOf(n) >= 0;
 
     let roll = rng(), acc = 0, type = 'pair';
-    const order2 = ['right','wrong','box','venn','algo','trio','critique'];
+    const order2 = ['right','wrong','box','venn','algo','trio','critique',
+                    'qsolo','qpair','qbox','check','trioAlgo'];
     for(let t=0;t<order2.length;t++){
       acc += MOCK_MIX[order2[t]];
       if(roll < acc){ type = order2[t]; break; }
@@ -1122,7 +1148,9 @@ function buildMockSet(){
     }
 
     // 그림 문항 수는 이 세트에서 뽑은 만큼만 — 넘으면 갑을 문항으로 돌린다
-    if(type === 'algo' && qs.filter(q=> q.type === 'algo').length >= quota.algo) type = 'pair';
+    // 순서도 몫은 2중·3중을 합쳐 센다 — 3중 순서도도 그림 문항이라 몫 밖으로 새면 안 된다
+    if((type === 'algo' || type === 'trioAlgo')
+       && qs.filter(q=> q.type === 'algo' || q.type === 'trioAlgo').length >= quota.algo) type = 'pair';
     if(type === 'venn' &&
        qs.filter(q=> q.type === 'venn' || q.type === 'trioVenn').length >= quota.anyVenn) type = 'pair';
 
@@ -1149,6 +1177,53 @@ function buildMockSet(){
         const q = buildAlgoQ(p[0], p[1], mockMainUnit(p[0]), rng, null);
         if(q){ qs.push(q); used[p[0]] = 1; used[p[1]] = 1; continue; }
       }
+      type = 'pair';
+    }
+
+    // 질문형 단독 · 학생 체크표 — 그 사람 혼자로 만든다
+    if(type === 'qsolo' || type === 'check'){
+      const q = (type === 'qsolo') ? buildQSoloQ(n, rng) : buildCheckQ(n, rng);
+      if(q){ qs.push(q); used[n] = 1; continue; }
+      type = 'pair';
+    }
+
+    // 질문형 갑을 · 질문형 보기 — 두 사람 판정이 한 문장에 다 있는 짝에서만
+    if(type === 'qpair' || type === 'qbox'){
+      const mateOk = m=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n, m)
+                      && pool.pairable.indexOf(m) >= 0;
+      const duo = mockDuoSets();
+      const mates = shuffleSeeded(Object.keys(duo)
+        .filter(k=> duo[k].who.indexOf(n) >= 0)
+        .map(k=> duo[k].who[0] === n ? duo[k].who[1] : duo[k].who[0])
+        .filter(m=> !!pool.byName[m])
+        .filter(mateOk), rng);
+      let qq = null;
+      for(let i=0;i<mates.length && i<6 && !qq;i++){
+        qq = (type === 'qpair') ? buildQPairQ(n, mates[i], mockMainUnit(n), rng, null)
+                                : buildQBoxQ(n, mates[i], mockMainUnit(n), rng, null);
+        if(qq){ used[n] = 1; used[mates[i]] = 1; }
+      }
+      if(qq){ qs.push(qq); continue; }
+      type = 'pair';
+    }
+
+    // 3중 순서도 — 삼중 판정이 갖춰진 조합에서. 셋을 어느 자리에 놓느냐로 재료가 달라진다
+    if(type === 'trioAlgo'){
+      const free = mockTrioReady().filter(w=>
+        w.every(m=> !used[m] && pool.byName[m] && !mockSoloOnly(m)));
+      const cands = shuffleSeeded(free.filter(w=> w.indexOf(n) >= 0), rng)
+        .concat(must ? [] : shuffleSeeded(free.filter(w=> w.indexOf(n) < 0), rng));
+      const PERM = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+      let tq = null;
+      for(let i=0;i<cands.length && i<8 && !tq;i++){
+        const t = cands[i];
+        const ord = shuffleSeeded(PERM, rng);
+        for(let j=0;j<ord.length && !tq;j++){
+          tq = buildTrioAlgoQ(t[ord[j][0]], t[ord[j][1]], t[ord[j][2]], mockMainUnit(t[0]), rng, null);
+        }
+        if(tq) t.forEach(m=> used[m] = 1);
+      }
+      if(tq){ qs.push(tq); continue; }
       type = 'pair';
     }
 
@@ -1569,7 +1644,8 @@ function mockPickQ(list, used){
     const q = mockToQuestion(it.body);
     if(!q) continue;
     used[it.body] = 1;
-    return Object.assign({}, it, { body:q });
+    // 원래 평서문을 남겨 둔다 — 판정을 되짚을 때 쓴다
+    return Object.assign({}, it, { body:q, plainBody:it.body });
   }
   return null;
 }
@@ -1606,21 +1682,236 @@ function buildAlgoQ(a, b, unit, rng, pairTopic){
            psA:psA, psB:psB, items:items, opts:set.opts, ans:set.ans };
 }
 
+/* ---------- 질문형 문항 ----------
+   「~의 대답을 할 질문으로 옳은 것은?」 꼴. 선지가 평서문이 아니라 질문이라
+   mockToQuestion 으로 어미를 돌린다. 규칙에 안 맞는 문장은 재료에서 그냥 빠진다.
+
+     qsolo : 한 사람. 「부정(또는 긍정)의 대답을 할 질문으로 옳은 것은?」
+     qpair : 두 사람. 「갑은 긍정, 을은 부정의 대답을 할 질문으로 적절한 것은?」
+     qbox  : 두 사람. 「갑, 을이 모두 부정의 대답을 할 질문만을 <보기>에서」
+   qpair·qbox 는 두 사람의 판정이 한 문장에 다 있어야 하므로 mockDuoOf 를 쓴다.
+   한 사람 판정만 아는 문장을 섞으면 나머지 한 사람의 답을 알 수 없다. */
+function buildQSoloQ(n, rng){
+  const b = mockPool().byName[n];
+  if(!b) return null;
+  const neg = rng() < 0.5;                       // 부정의 대답을 할 질문을 찾는 문항인가
+  const ansSrc  = shuffleSeeded(neg ? b.X : b.O, rng);
+  const distSrc = shuffleSeeded(neg ? b.O : b.X, rng);
+  const used = {};
+  const ansItem = mockPickQ(ansSrc, used);
+  if(!ansItem) return null;
+  const dist = [];
+  for(let i=0;i<4;i++){
+    const d = mockPickQ(distSrc, used);
+    if(!d) return null;
+    dist.push(d);
+  }
+  const ps = shuffleSeeded(b.ps, rng)[0];
+  const choices = shuffleSeeded(dist.concat([ansItem]), rng);
+  return { type:'qsolo', name:n, neg:neg, ps:ps, choices:choices, ans:choices.indexOf(ansItem) };
+}
+
+// 판정 묶음 하나를 그 사람 쪽에서 본 선지로 만든다 — 해설·출처가 원래 선지에서 따라온다
+let MOCK_EX_IDS = null;
+function mockExcluded(id){ return !!(MOCK_EX_IDS && id && MOCK_EX_IDS[id]); }
+function mockDuoItem(p, who, qbody){
+  return { body:qbody, id:p.id[who] || '', note:p.note[who] || '',
+           plainBody:p.body, pat:p.ans };
+}
+function mockPickDuo(list, used, who){
+  for(let i=0;i<list.length;i++){
+    const p = list[i];
+    if(used[p.body]) continue;
+    if(mockExcluded(p.id[who])) continue;      // 한 시험지에서 같은 선지를 두 번 쓰지 않는다
+    if(p.body.indexOf('대답') >= 0 || p.body.indexOf('질문') >= 0) continue;
+    const q = mockToQuestion(p.body);
+    if(!q) continue;
+    used[p.body] = 1;
+    return mockDuoItem(p, who, q);
+  }
+  return null;
+}
+
+function buildQPairQ(a, b, unit, rng, pairTopic){
+  const pool = mockPool();
+  const d = mockDuoOf(a, b);
+  if(!d) return null;
+  const flip = d.who[0] !== a;                   // 묶음은 이름순이라 갑·을 자리를 맞춘다
+  const pat = (k)=> shuffleSeeded(d[flip ? { OO:'OO', OX:'XO', XO:'OX', XX:'XX' }[k] : k], rng);
+  const used = {};
+  // 정답은 「갑 예 · 을 아니요」. 오답은 둘 다 예 · 둘 다 아니요 · 갑만 아니요
+  const ansItem = mockPickDuo(pat('OX'), used, a);
+  if(!ansItem) return null;
+  const wrongSrc = shuffleSeeded(pat('OO').concat(pat('XO'), pat('XX')), rng);
+  const dist = [];
+  for(let i=0;i<4;i++){
+    const w = mockPickDuo(wrongSrc, used, a);
+    if(!w) return null;
+    dist.push(w);
+  }
+  const A = pool.byName[a], B = pool.byName[b];
+  const choices = shuffleSeeded(dist.concat([ansItem]), rng);
+  return { type:'qpair', a:a, b:b, unit:unit, pairTopic:pairTopic||null,
+           psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
+           choices:choices, ans:choices.indexOf(ansItem) };
+}
+
+function buildQBoxQ(a, b, unit, rng, pairTopic){
+  const pool = mockPool();
+  const d = mockDuoOf(a, b);
+  if(!d) return null;
+  const flip = d.who[0] !== a;
+  const pat = (k)=> shuffleSeeded(d[flip ? { OO:'OO', OX:'XO', XO:'OX', XX:'XX' }[k] : k], rng);
+  const set = mockOptSet(rng);
+  const used = {};
+  // 「모두 부정」과 「모두 긍정」 두 꼴을 다 쓴다
+  const neg = rng() < 0.5;
+  const yes = shuffleSeeded(pat(neg ? 'XX' : 'OO'), rng);
+  const no  = shuffleSeeded(neg ? pat('OO').concat(pat('OX'), pat('XO'))
+                                : pat('XX').concat(pat('OX'), pat('XO')), rng);
+  const items = [];
+  for(let i=0;i<4;i++){
+    const isTrue = set.idx.indexOf(i) >= 0;
+    const pick = mockPickDuo(isTrue ? yes : no, used, a);
+    if(!pick) return null;
+    items.push(Object.assign({}, pick, { mark:MOCK_BOX_MARK[i], ok:isTrue }));
+  }
+  const A = pool.byName[a], B = pool.byName[b];
+  return { type:'qbox', a:a, b:b, unit:unit, pairTopic:pairTopic||null, neg:neg,
+           psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
+           items:items, opts:set.opts, ans:set.ans };
+}
+
+/* ---------- 학생 체크표 ----------
+   「다음을 주장한 사상가의 관점에만 모두 '✓'를 표시한 학생은?」
+   문장 넷에 그 사람의 O/X 를 매겨 두면 정답 체크 패턴이 저절로 정해진다.
+   학생 다섯 가운데 넷은 그 패턴과 한 군데 이상 다른 패턴을 받는다. */
+const MOCK_CHECK_STU = ['갑','을','병','정','무'];
+function buildCheckQ(n, rng){
+  const b = mockPool().byName[n];
+  if(!b) return null;
+  if(b.O.length < 2 || b.X.length < 2) return null;
+  const O = shuffleSeeded(b.O, rng), X = shuffleSeeded(b.X, rng);
+  const nO = (rng() < 0.5) ? 2 : (b.O.length >= 3 && b.X.length >= 1 ? 3 : 2);
+  const rows = shuffleSeeded(
+    O.slice(0, nO).map(c=> Object.assign({}, c, { ok:true }))
+     .concat(X.slice(0, 4 - nO).map(c=> Object.assign({}, c, { ok:false }))), rng);
+  if(rows.length < 4) return null;
+  rows.forEach((r, i)=>{ r.mark = String(i + 1); });
+  const truth = rows.map(r=> r.ok ? 1 : 0);
+  const key = p=> p.join('');
+  const all = [];
+  for(let m=0;m<16;m++) all.push([0,1,2,3].map(i=> (m >> i) & 1));
+  const others = shuffleSeeded(all.filter(p=> key(p) !== key(truth)), rng).slice(0, 4);
+  if(others.length < 4) return null;
+  const pats = shuffleSeeded(others.concat([truth]), rng);
+  const ans = pats.map(key).indexOf(key(truth));
+  const choices = pats.map((p, i)=> ({ body:MOCK_CHECK_STU[i] }));
+  return { type:'check', name:n, ps:shuffleSeeded(b.ps, rng)[0],
+           items:rows, pats:pats, choices:choices, ans:ans };
+}
+
+/* ---------- 3중 순서도 ----------
+   평가원·사설이 쓰는 갈림길 모양은 하나가 아니다. 세 모양을 두고 세트마다 뽑는다.
+   자리마다 「어떤 판정이어야 하는가」가 다르므로 모양이 바뀌면 재료도 바뀐다.
+
+   right  A ─아니요→ D ─예→ 병 / A ─예→ B ─아니요→ C ─예→ 을 / B ─예→ 갑
+          A 는 갑·을이 예, 병이 아니요
+   left   A ─예→ 갑 / A ─아니요→ B ─예→ C ─예→ 을 / B ─아니요→ D ─예→ 병
+          A 는 갑만 예
+   chain  A ─예→ B ─예→ 갑 / B ─아니요→ C ─예→ 을 / C ─아니요→ D ─예→ 병
+          A 는 셋 다 예인 공통 질문
+
+   자리 조건은 셋 가운데 하나다.
+     trio <패턴>  세 사람 판정이 그 패턴이어야 한다 (갑·을·병 순)
+     duo  <둘><패턴>  두 사람 판정이 그 패턴이어야 한다
+     solo <한 사람>  그 사람의 O선지
+   거짓 보기는 그 조건을 어기는 문장을 넣는다. */
+const MOCK_TRIO_ALGO_SHAPES = [
+  { k:'right', slots:{ A:['trio','OOX'], B:['duo',0,1,'OX'], C:['solo',1], D:['solo',2] } },
+  { k:'left',  slots:{ A:['trio','OXX'], B:['duo',1,2,'OX'], C:['solo',1], D:['solo',2] } },
+  { k:'chain', slots:{ A:['trio','OOO'], B:['trio','OXX'], C:['duo',1,2,'OX'], D:['solo',2] } },
+];
+function mockTrioAlgoShape(k){
+  return MOCK_TRIO_ALGO_SHAPES.filter(s=> s.k === k)[0] || MOCK_TRIO_ALGO_SHAPES[0];
+}
+// 한 문장이 그 자리의 조건에 맞는가
+function mockTrioAlgoFit(p, spec, who){
+  const at = i=> p.ans[who[i]];
+  if(spec[0] === 'trio'){
+    const k = (at(0) || '-') + (at(1) || '-') + (at(2) || '-');
+    return k.indexOf('-') < 0 ? (k === spec[1]) : null;      // 판정이 모자라면 쓸 수 없다
+  }
+  if(spec[0] === 'duo'){
+    const x = at(spec[1]), y = at(spec[2]);
+    return (x && y) ? ((x + y) === spec[3]) : null;
+  }
+  return at(spec[1]) ? (at(spec[1]) === 'O') : null;
+}
+function buildTrioAlgoQ(a, b, c, unit, rng, pairTopic, shapeKey){
+  const pool = mockPool();
+  const set = mockTrioOf(a, b, c);
+  if(!set) return null;
+  const who = [a, b, c];
+  if(who.some(n=> !pool.byName[n])) return null;
+  // 모양을 정해 주지 않으면 세 모양을 섞어 차례로 본다 — 재료가 되는 모양으로 만든다
+  const shapes = shapeKey ? [mockTrioAlgoShape(shapeKey)] : shuffleSeeded(MOCK_TRIO_ALGO_SHAPES, rng);
+  const opt = mockOptSet(rng);
+  for(let si=0; si<shapes.length; si++){
+    const q = mockTrioAlgoWith(shapes[si], who, pool, set, opt, rng, unit, pairTopic);
+    if(q) return q;
+  }
+  return null;
+}
+function mockTrioAlgoWith(shape, who, pool, set, opt, rng, unit, pairTopic){
+  const [a, b, c] = who;
+  const used = {};
+  const zones = ['A','B','C','D'];
+  const items = [];
+  for(let i=0;i<4;i++){
+    const isTrue = opt.idx.indexOf(i) >= 0;
+    const z = zones[i];
+    const spec = shape.slots[z];
+    let pick = null;
+    if(spec[0] === 'solo'){
+      // 한 사람 자리는 그 사람의 선지에서 바로 뽑는다 — 판정 묶음을 거치지 않아 재료가 넓다
+      const bn = pool.byName[who[spec[1]]];
+      pick = mockPickQ(shuffleSeeded(isTrue ? bn.O : bn.X, rng), used);
+      if(pick) pick = Object.assign({}, pick, { who:who[spec[1]] });
+    } else {
+      const src = shuffleSeeded(set.list.filter(p=> mockTrioAlgoFit(p, spec, who) === isTrue), rng);
+      // 해설·출처는 그 자리가 가리키는 첫 사람의 선지에서 끌어온다
+      pick = mockPickDuo(src, used, who[spec[0] === 'duo' ? spec[1] : 0]);
+    }
+    if(!pick) return null;
+    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue }));
+  }
+  const ps = who.map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
+  if(ps.some(x=> !x)) return null;
+  return { type:'trioAlgo', who:who, shape:shape.k, unit:unit, pairTopic:pairTopic||null,
+           psList:ps, items:items, opts:opt.opts, ans:opt.ans };
+}
+
 /* ---------- 삼중 판정 묶음 ----------
    같은 문장을 세 사람에게 각각 O/X 로 매긴 자체 제작 선지(set 「삼중-자체」)를
    조합별로 모은다. 세 판정이 있으면 3중 벤의 일곱 영역도, 여섯 방향의 비판도
    계산으로 정해진다. X 가 Y 를 비판할 수 있는 것은 X 가 O 이고 Y 가 X 일 때뿐이다. */
 let MOCK_TRIO_CACHE = null;
-function mockTrioSets(){
-  if(MOCK_TRIO_CACHE) return MOCK_TRIO_CACHE;
+let MOCK_BODY_CACHE = null;
+let MOCK_DUO_CACHE = null;
+/* 판정이 모인 문장 — 한 문장에 사람마다 O/X 가 붙은 목록.
+   2인(갑·을) 재료와 3인(갑·을·병) 재료가 다 여기서 나온다. */
+function mockBodySets(){
+  if(MOCK_BODY_CACHE) return MOCK_BODY_CACHE;
   const names = mockNameList();
   const byBody = {};
-  const put = (body, name, ans, id, crit)=>{
-    const b = byBody[body] || (byBody[body] = { body:body, crit:crit||'', ans:{}, id:{} });
+  const put = (body, name, ans, id, crit, note, src, psid, quote)=>{
+    const b = byBody[body] || (byBody[body] = { body:body, crit:crit||'', ans:{}, id:{}, note:{} });
     if(crit && !b.crit) b.crit = crit;
     if(b.ans[name] && b.ans[name] !== ans) b.bad = 1;   // 판정이 엇갈리면 이 문장은 버린다
     b.ans[name] = ans;
     b.id[name] = b.id[name] || id;
+    if(note && !b.note[name]) b.note[name] = note;
   };
   // 기출이든 자체 제작이든, 판정을 읽어 낼 수 있는 선지는 다 모은다.
   //   단독 「A는 P」          → A 판정 하나
@@ -1632,24 +1923,27 @@ function mockTrioSets(){
     if(pr){
       if(it.answer === 'O'){
         const body = pr.body.replace(/^모두\s*/, '');
-        put(body, pr.a, 'O', it.id, it.crit); put(body, pr.b, 'O', it.id, it.crit);
+        put(body, pr.a, 'O', it.id, it.crit, it.note); put(body, pr.b, 'O', it.id, it.crit, it.note);
       }
       return;
     }
     const df = mockSplitDiff(it.text, names, it.topics);
     if(df){
       if(it.answer === 'O'){
-        put(df.body, df.a, 'O', it.id, it.crit); put(df.body, df.b, 'X', it.id, it.crit);
+        put(df.body, df.a, 'O', it.id, it.crit, it.note); put(df.body, df.b, 'X', it.id, it.crit, it.note);
       }
       return;
     }
     const sp = mockSplit(it.text, names, it.topics);
-    if(sp) put(sp.body, sp.name, it.answer, it.id, it.crit);
+    if(sp) put(sp.body, sp.name, it.answer, it.id, it.crit, it.note);
   });
+  MOCK_BODY_CACHE = Object.keys(byBody).map(k=> byBody[k]).filter(b=> !b.bad);
+  return MOCK_BODY_CACHE;
+}
+function mockTrioSets(){
+  if(MOCK_TRIO_CACHE) return MOCK_TRIO_CACHE;
   const out = {};
-  Object.keys(byBody).forEach(k=>{
-    const b = byBody[k];
-    if(b.bad) return;                     // 판정이 엇갈리는 문장은 버린다
+  mockBodySets().forEach(b=>{
     const who = Object.keys(b.ans);
     if(who.length < 3) return;
     // 세 사람 이상이면 가능한 세 명 조합을 다 만든다
@@ -1663,6 +1957,27 @@ function mockTrioSets(){
   MOCK_TRIO_CACHE = out;
   return out;
 }
+/* 두 사람 재료 — 패턴별로 갈라 둔다. OO 둘 다 예 · OX 갑만 예 · XO 을만 예 · XX 둘 다 아니요.
+   「갑은 긍정, 을은 부정의 대답을 할 질문」과 「둘 다 부정의 대답을 할 질문」이 이것을 쓴다. */
+function mockDuoSets(){
+  if(MOCK_DUO_CACHE) return MOCK_DUO_CACHE;
+  const out = {};
+  mockBodySets().forEach(b=>{
+    const who = Object.keys(b.ans);
+    if(who.length < 2) return;
+    for(let i=0;i<who.length-1;i++)
+      for(let j=i+1;j<who.length;j++){
+        const t = [who[i], who[j]].sort();
+        const k = t.join('|');
+        const e = out[k] || (out[k] = { who:t, OO:[], OX:[], XO:[], XX:[] });
+        e[b.ans[t[0]] + b.ans[t[1]]].push(b);
+      }
+  });
+  MOCK_DUO_CACHE = out;
+  return out;
+}
+function mockDuoOf(a, b){ return mockDuoSets()[[a, b].slice().sort().join('|')] || null; }
+
 // 셋을 어떤 순서로 놓든 같은 묶음을 찾는다
 function mockTrioOf(a, b, c){
   return mockTrioSets()[[a,b,c].slice().sort().join('|')] || null;
@@ -1899,7 +2214,8 @@ function buildTrioQ(a, b, c, unit, rng, pairTopic){
    이미 쓴 선지·제시문은 임시 풀에서 빼서 건네 같은 문장이 두 번 나오지 않게 한다.
    3중 벤·비판은 쓰지 않는다. 같은 날·같은 세트 번호면 같은 문제(씨앗은 mockSeedStr).
    =================================================================== */
-const MOCK_MIX_PLAIN = { right:0.26, wrong:0.18, pair:0.22, box:0.17, venn:0.06, algo:0.05, trio:0.06 };
+const MOCK_MIX_PLAIN = { right:0.26, wrong:0.18, pair:0.22, box:0.17, venn:0.06, algo:0.05, trio:0.06,
+                         qsolo:0.06, qpair:0.05, qbox:0.04, check:0.05, trioAlgo:0.05 };
 
 // 이미 쓴 id(선지·제시문)를 뺀 임시 풀 — 빌더가 mockPool() 로 읽으므로 그 자리에 잠깐 끼운다
 function mockFilteredPool(names, ex){
@@ -1949,22 +2265,30 @@ function mockSoloQ(n, type, rng){
   return { type:type, name:n, ps:ps, choices:choices, ans:choices.indexOf(ansItem) };
 }
 function mockBuildOne(type, names, unit, topic, rng, ex, opt){
-  return mockUsing(mockFilteredPool(names, ex), ()=>{
+  const saveEx = MOCK_EX_IDS;
+  MOCK_EX_IDS = ex || null;
+  try { return mockUsing(mockFilteredPool(names, ex), ()=>{
     if(type === 'right' || type === 'wrong') return mockSoloQ(names[0], type, rng);
     if(type === 'pair') return buildPairQ(names[0], names[1], unit, rng, topic, opt);
     if(type === 'box')  return buildBoxQ(names[0], names[1], unit, rng, topic);
     if(type === 'venn') return buildVennQ(names[0], names[1], unit, rng, topic);
     if(type === 'algo') return buildAlgoQ(names[0], names[1], unit, rng, topic);
     if(type === 'trio') return buildTrioQ(names[0], names[1], names[2], unit, rng, topic);
+    if(type === 'qsolo') return buildQSoloQ(names[0], rng);
+    if(type === 'check') return buildCheckQ(names[0], rng);
+    if(type === 'qpair') return buildQPairQ(names[0], names[1], unit, rng, topic);
+    if(type === 'qbox')  return buildQBoxQ(names[0], names[1], unit, rng, topic);
+    if(type === 'trioAlgo') return buildTrioAlgoQ(names[0], names[1], names[2], unit, rng, topic);
     return null;
-  });
+  }); } finally { MOCK_EX_IDS = saveEx; }
 }
 // 가중 무작위 순열 — 가중치가 큰 유형이 앞에 서기 쉽다
 function mockTypeOrder(rng, types){
   return types.map(t=>({ t:t, k:Math.pow(rng(), 1 / (MOCK_MIX_PLAIN[t] || 0.05)) }))
               .sort((x,y)=> y.k - x.k).map(x=> x.t);
 }
-const MOCK_ALL_TYPES = ['right','wrong','pair','box','venn','algo','trio'];
+const MOCK_ALL_TYPES = ['right','wrong','pair','box','venn','algo','trio',
+                        'qsolo','qpair','qbox','check','trioAlgo'];
 
 // 「A와 B는 모두」 선지(틀린 것)가 하나라도 있는 짝인가 — 정형화 ⑤번 비교 선지의 재료
 function mockPairHasBoth(a, b){
@@ -1979,6 +2303,8 @@ function mockGenQ(n, rng, c){
   const ex = c.ex || {};
   const unit = c.unit;
   const ban = c.ban || (()=> false);
+  // 짝끼리도 못 묶는 조합이 있다(정형화의 벤담·밀). 셋을 고르는 자리에서 서로 확인한다
+  const pairOk = c.pairOk || (()=> true);
   const mateOk = m=> m !== n && !ban(m) && !mockSameSchool(n, m) && !!pool.byName[m];
   const wide = (pool.unitMembers[unit] || []).concat(mockIdeoMates(n)).filter((m,i,a)=> a.indexOf(m) === i && pool.pairable.indexOf(m) >= 0).filter(mateOk);
   const topicOf = m=>{
@@ -1997,11 +2323,47 @@ function mockGenQ(n, rng, c){
     }
     return null;
   };
+  // 두 사람 판정이 한 문장에 다 있는 짝 — 질문형 갑을·질문형 보기의 재료
+  const duoMates = ()=>{
+    const duo = mockDuoSets();
+    return Object.keys(duo)
+      .filter(k=> duo[k].who.indexOf(n) >= 0)
+      .map(k=> duo[k].who[0] === n ? duo[k].who[1] : duo[k].who[0])
+      // 판정 묶음에는 출제 풀에 없는 이름도 있다 — 먼저 걸러야 mateOk 가 안전하다
+      .filter(m=> !!pool.byName[m] && pool.pairable.indexOf(m) >= 0)
+      .filter(m=> c.mate ? m === c.mate : mateOk(m));
+  };
   const tryType = type=>{
-    if(type === 'right' || type === 'wrong'){
+    if(type === 'right' || type === 'wrong' || type === 'qsolo' || type === 'check'){
       if(c.mate) return null;
       const q = mockBuildOne(type, [n], unit, null, rng, ex);
       return q ? { q:q, names:[n] } : null;
+    }
+    if(type === 'qpair' || type === 'qbox'){
+      const mates = shuffleSeeded(duoMates(), rng);
+      for(let i=0;i<mates.length && i<6;i++){
+        const q = mockBuildOne(type, [n, mates[i]], unit, topicOf(mates[i]), rng, ex);
+        if(q) return { q:q, names:[n, mates[i]] };
+      }
+      return null;
+    }
+    if(type === 'trioAlgo'){
+      if(c.mate) return null;
+      const PERM = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+      const free = mockTrioReady().filter(w=> w.indexOf(n) >= 0
+        && w.every(m=> !!pool.byName[m]) && w.every(m=> m === n || mateOk(m))
+        && w.every((x, i)=> w.every((y, j)=> i >= j || pairOk(x, y))));
+      const cands = shuffleSeeded(free, rng);
+      for(let i=0;i<cands.length && i<6;i++){
+        const t = cands[i];
+        const ord = shuffleSeeded(PERM, rng);
+        for(let j=0;j<ord.length;j++){
+          const w = [t[ord[j][0]], t[ord[j][1]], t[ord[j][2]]];
+          const q = mockBuildOne('trioAlgo', w, unit, null, rng, ex);
+          if(q) return { q:q, names:w };
+        }
+      }
+      return null;
     }
     if(type === 'pair' || type === 'box'){
       const fifth = (type === 'pair' && c.fifth) ? { fifth:true } : null;
@@ -2027,6 +2389,7 @@ function mockGenQ(n, rng, c){
       for(let i=0;i<3;i++){
         const two = mockPick2(mates, rng, n);
         if(!two) break;
+        if(!pairOk(two[0], two[1])) continue;
         const q = mockBuildOne('trio', [n, two[0], two[1]], unit, null, rng, ex);
         if(q) return { q:q, names:[n, two[0], two[1]] };
       }
@@ -2053,9 +2416,13 @@ function buildThemeSet(){
   names.forEach(n=>{
     const unit = mockMainUnit(n);
     const mates = {};
-    // 한 학자 다섯 문항: 단독 옳은/옳지 않은 · 갑을 · 보기에 그림 유형 하나를 섞는다
-    const plan = shuffleSeeded(['right', 'wrong', 'pair', 'box',
-      shuffleSeeded(['venn', 'algo', 'trio', 'pair'], rng)[0]], rng);
+    /* 한 학자 다섯 문항 — 단독 둘 · 갑을이나 보기 하나 · 그림 하나 · 신유형 하나.
+       자유 출제에서는 신유형에 자리를 떼 주지 않으므로, 한 사람을 집중해서 푸는
+       테마별에서만 다섯 자리 가운데 하나를 신유형 몫으로 둔다. */
+    const plan = shuffleSeeded([
+      shuffleSeeded(['right', 'wrong'], rng)[0], 'pair', 'box',
+      shuffleSeeded(['venn', 'algo', 'trio', 'trioAlgo'], rng)[0],
+      shuffleSeeded(['qsolo', 'qpair', 'qbox', 'check'], rng)[0]], rng);
     // 틀린 선지(X)가 모자란 학자는 「옳은 것」(X 4개 필요) 대신 「옳지 않은 것」(X 1개)으로 돌린다
     if(pool.byName[n].X.length < 14) plan.forEach((t, i)=>{ if(t === 'right') plan[i] = 'wrong'; });
     const mine = [];
@@ -2065,7 +2432,7 @@ function buildThemeSet(){
       // 위에서부터: 계획한 유형(짝 안 겹치게) → 계획한 유형 → 아무 유형 → 이미 쓴 선지를 풀어서라도
       let r = mockGenQ(n, rng, Object.assign({ order:[t] }, withMates))
            || mockGenQ(n, rng, Object.assign({ order:[t] }, base))
-           || mockGenQ(n, rng, Object.assign({ order:['wrong', 'pair', 'box', 'trio', 'right'] }, withMates))
+           || mockGenQ(n, rng, Object.assign({ order:['wrong', 'qsolo', 'check', 'pair', 'box', 'trio', 'right'] }, withMates))
            || mockGenQ(n, rng, Object.assign({ types:MOCK_ALL_TYPES, ex:{} }, { unit:unit, ban:base.ban }));
       if(!r) return;
       mockQIds(r.q, ex);
@@ -2119,15 +2486,17 @@ function buildFormalSet(){
       used[m] = 1;
       MOCK_FORMAL_EXCL.forEach(g=>{ if(g.indexOf(m) >= 0) g.forEach(x=>{ used[x] = 1; }); });
     });
-    if(r.q.type === 'algo') cnt.algo++;
+    if(r.q.type === 'algo' || r.q.type === 'trioAlgo') cnt.algo++;
     if(r.q.type === 'venn') cnt.venn++;
     mockQIds(r.q, ex);
   };
-  const types = (list)=> list.filter(t=> !(t === 'algo' && cnt.algo >= 2) && !(t === 'venn' && cnt.venn >= 2));
+  const types = (list)=> list.filter(t=> !((t === 'algo' || t === 'trioAlgo') && cnt.algo >= 2)
+                                       && !(t === 'venn' && cnt.venn >= 2));
   const gen = (n, extra)=>{
     const b = bucketOf(n);
     if(!b || left[b] <= 0 || !pool.byName[n]) return null;
     const c = Object.assign({ unit:unitOf(n), ex:ex, fifth:true,
+      pairOk:(x, y)=> !exclWith(x, y),
       ban:m=> used[m] || soloKeep[m] || reserved[m] || exclWith(n, m) || bucketOf(m) !== b }, extra || {});
     if(!c.order && !c.types) c.types = types(MOCK_ALL_TYPES);
     const r = mockGenQ(n, rng, c);
@@ -2435,7 +2804,7 @@ function toggleMockGuess(i){
      찍은 문항      → 그 문항의 선지(보기) 전부 — 맞혔어도
      고르지 않은 문항 → 찍은 것과 같이 본다
 */
-const MOCK_BOX_TYPES = { box:1, venn:1, algo:1, trioVenn:1 };
+const MOCK_BOX_TYPES = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1, check:1 };
 function mockStarIds(set, run){
   const ids = [];
   const add = id => { if(id && ids.indexOf(id) < 0) ids.push(id); };

@@ -849,7 +849,7 @@ function nextPs(){
    =================================================================== */
 
 const MOCK_MARK = ['①','②','③','④','⑤'];
-const MOCK_BOXY = { box:1, venn:1, algo:1, trioVenn:1 };
+const MOCK_BOXY = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1 };
 const MOCK_TRIO_LB = ['갑','을','병'];
 
 function mockEraWord(era){
@@ -884,6 +884,28 @@ function mockStemText(q){
   }
   if(q.type === 'trio'){
     return mockWhoPhrase(q.who, false) + '의 입장으로 옳은 것은?';
+  }
+  if(q.type === 'trioAlgo'){
+    return '(가)의 ' + mockWhoPhrase(q.who, true) + '의 입장을 (나) 그림으로 탐구할 때, ' +
+           'A~D에 들어갈 적절한 질문만을 <보기>에서 있는 대로 고른 것은?';
+  }
+  if(q.type === 'qbox'){
+    return mockWhoPhrase([q.a, q.b], false) + '이 모두 ' + (q.neg ? '부정' : '긍정') +
+           '의 대답을 할 질문만을 <보기>에서 있는 대로 고른 것은?';
+  }
+  if(q.type === 'qpair'){
+    return mockWhoPhrase([q.a, q.b], false) +
+           ' 가운데 갑은 긍정, 을은 부정의 대답을 할 질문으로 가장 적절한 것은?';
+  }
+  if(q.type === 'qsolo'){
+    const e2 = mockEra(q.name);
+    return '다음을 주장한 ' + (e2 === '사회' ? '사회' : e2) + ' 사상가가 ' +
+           (q.neg ? '부정' : '긍정') + '의 대답을 할 질문으로 옳은 것은?';
+  }
+  if(q.type === 'check'){
+    const e3 = mockEra(q.name);
+    return '다음을 주장한 ' + (e3 === '사회' ? '사회' : e3) +
+           " 사상가의 관점에만 모두 '✓'를 표시한 학생은?";
   }
   if(q.type === 'algo'){
     return '(가)의 ' + mockWhoPhrase([q.a, q.b], true) + '의 입장을 (나) 그림으로 탐구하고자 할 때, ' +
@@ -930,12 +952,13 @@ function mockPsBox(q, withSrc){
     const parts = list.map(([lb, p])=>{ const l = mockPsSrcLabel(p); return l ? (lb ? lb + ' ' : '') + escHtml(l) : ''; }).filter(Boolean);
     return parts.length ? `<div class="mock-ps-tag"><span>출처</span>${parts.join(' · ')}</div>` : '';
   };
-  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique'){
+  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique' || q.type === 'trioAlgo'){
     return tag(q.psList.map((p,i)=> [MOCK_TRIO_LB[i], p])) + `<div class="mock-ps mock-ps-pair">
       ${q.psList.map((p,i)=>`<div class="mock-ps-row"><span class="lb">${MOCK_TRIO_LB[i]}</span><span>${escHtml(p.text)}</span></div>`).join('')}
     </div>`;
   }
-  if(q.type === 'venn' || q.type === 'box' || q.type === 'pair' || q.type === 'algo'){
+  if(q.type === 'venn' || q.type === 'box' || q.type === 'pair' || q.type === 'algo'
+     || q.type === 'qpair' || q.type === 'qbox'){
     return tag([[q.L1||'갑', q.psA], [q.L2||'을', q.psB]]) + `<div class="mock-ps mock-ps-pair">
       <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}</span></div>
       <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}</span></div>
@@ -948,6 +971,8 @@ function mockFigFor(q){
   if(q.type === 'algo') return mockAlgoFig();
   if(q.type === 'trioVenn') return mockTrioVennFig(q.zones);
   if(q.type === 'critique') return mockCritiqueFig();
+  if(q.type === 'trioAlgo') return mockTrioAlgoFig(q.shape);
+  if(q.type === 'check') return mockCheckFig(q);
   return '';
 }
 let MOCK_FIG_SEQ = 0;
@@ -1081,13 +1106,96 @@ function mockAlgoFig(){
     <text x="420" y="178" text-anchor="middle" font-size="11.5" fill="currentColor">을의 입장</text>
   </svg></div>`;
 }
+/* (나) 3중 순서도 — 모양이 셋이다. 자리 조건이 모양마다 다르므로 그림도 따로 그린다.
+   공용 조각: 마름모 · 결론 상자 · 예/아니요 글자 */
+function mockDia(cx, cy, t){
+  return `<polygon points="${cx},${cy-22} ${cx+52},${cy} ${cx},${cy+22} ${cx-52},${cy}" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">${t}</text>`;
+}
+function mockEnd(cx, y, t){
+  return `<rect x="${cx-54}" y="${y}" width="108" height="24" rx="12" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="${y+16}" text-anchor="middle" font-size="11.5" fill="currentColor">${t}의 입장</text>`;
+}
+function mockYes(x, y, anchor){
+  return `<text x="${x}" y="${y}" text-anchor="${anchor||'end'}" font-size="9.5" fill="currentColor">예</text>`;
+}
+function mockNo(x, y){
+  return `<text x="${x}" y="${y}" font-size="9.5" fill="currentColor">아니요</text>`;
+}
+function mockTrioAlgoFig(shape){
+  const head = (cx)=> `<rect x="${cx-120}" y="4" width="240" height="26" rx="3" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="21" text-anchor="middle" font-size="11.5" fill="currentColor">사상가 갑, 을, 병의 입장을 탐구한다.</text>`;
+  const dash = 'stroke="currentColor" stroke-dasharray="4 3"';
+  let inner;
+  if(shape === 'left'){
+    // A ─예→ 갑 / A ─아니요→ B ─예→ C ─예→ 을 / B ─아니요→ D ─예→ 병
+    inner = `${head(140)}
+      <line x1="140" y1="30" x2="140" y2="44" stroke="currentColor"/>
+      ${mockDia(140, 66, 'A')}
+      ${mockNo(200, 61)}<line x1="192" y1="66" x2="300" y2="66" ${dash}/><line x1="300" y1="66" x2="300" y2="102" ${dash}/>
+      ${mockYes(132, 101)}<line x1="140" y1="88" x2="140" y2="222" stroke="currentColor"/>
+      ${mockDia(300, 124, 'B')}
+      ${mockNo(360, 119)}<line x1="352" y1="124" x2="450" y2="124" ${dash}/><line x1="450" y1="124" x2="450" y2="152" ${dash}/>
+      ${mockYes(292, 159)}<line x1="300" y1="146" x2="300" y2="152" stroke="currentColor"/>
+      ${mockDia(300, 174, 'C')}
+      ${mockYes(292, 216)}<line x1="300" y1="196" x2="300" y2="222" stroke="currentColor"/>
+      ${mockDia(450, 174, 'D')}
+      ${mockYes(442, 216)}<line x1="450" y1="196" x2="450" y2="222" stroke="currentColor"/>
+      ${mockEnd(140, 222, '갑')}${mockEnd(300, 222, '을')}${mockEnd(450, 222, '병')}`;
+  } else if(shape === 'chain'){
+    // A ─예→ B ─예→ 갑 / B ─아니요→ C ─예→ 을 / C ─아니요→ D ─예→ 병
+    inner = `${head(140)}
+      <line x1="140" y1="30" x2="140" y2="44" stroke="currentColor"/>
+      ${mockDia(140, 66, 'A')}
+      ${mockYes(132, 101)}<line x1="140" y1="88" x2="140" y2="102" stroke="currentColor"/>
+      ${mockDia(140, 124, 'B')}
+      ${mockNo(200, 119)}<line x1="192" y1="124" x2="300" y2="124" ${dash}/><line x1="300" y1="124" x2="300" y2="152" ${dash}/>
+      ${mockYes(132, 250)}<line x1="140" y1="146" x2="140" y2="256" stroke="currentColor"/>
+      ${mockDia(300, 174, 'C')}
+      ${mockNo(360, 169)}<line x1="352" y1="174" x2="450" y2="174" ${dash}/><line x1="450" y1="174" x2="450" y2="196" ${dash}/>
+      ${mockYes(292, 250)}<line x1="300" y1="196" x2="300" y2="256" stroke="currentColor"/>
+      ${mockDia(450, 218, 'D')}
+      ${mockYes(442, 250)}<line x1="450" y1="240" x2="450" y2="256" stroke="currentColor"/>
+      ${mockEnd(140, 256, '갑')}${mockEnd(300, 256, '을')}${mockEnd(450, 256, '병')}`;
+  } else {
+    // right(기본) — A ─아니요→ D ─예→ 병 / A ─예→ B ─아니요→ C ─예→ 을 / B ─예→ 갑
+    inner = `${head(200)}
+      <line x1="200" y1="30" x2="200" y2="44" stroke="currentColor"/>
+      ${mockDia(200, 66, 'A')}
+      ${mockNo(260, 61)}<line x1="252" y1="66" x2="450" y2="66" ${dash}/><line x1="450" y1="66" x2="450" y2="92" ${dash}/>
+      ${mockDia(450, 114, 'D')}
+      ${mockYes(442, 156)}<line x1="450" y1="136" x2="450" y2="222" stroke="currentColor"/>
+      ${mockYes(192, 101)}<line x1="200" y1="88" x2="200" y2="102" stroke="currentColor"/>
+      ${mockDia(200, 124, 'B')}
+      ${mockNo(260, 119)}<line x1="252" y1="124" x2="320" y2="124" ${dash}/><line x1="320" y1="124" x2="320" y2="152" ${dash}/>
+      ${mockDia(320, 174, 'C')}
+      ${mockYes(312, 216)}<line x1="320" y1="196" x2="320" y2="222" stroke="currentColor"/>
+      ${mockYes(192, 216)}<line x1="200" y1="146" x2="200" y2="222" stroke="currentColor"/>
+      ${mockEnd(200, 222, '갑')}${mockEnd(320, 222, '을')}${mockEnd(450, 222, '병')}`;
+  }
+  const h = (shape === 'chain') ? 290 : 256;
+  return `<div class="mock-fig"><svg viewBox="0 0 560 ${h}" width="100%" style="max-width:480px" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="갑 을 병의 입장을 가르는 순서도">${inner}</svg></div>`;
+}
+
+// 학생 체크표 — 세로는 입장 넷, 가로는 학생 다섯. 체크한 칸에만 ✓
+function mockCheckFig(q){
+  return `<table class="mock-check">
+    <thead><tr><th class="h">입장 \\ 학생</th>${MOCK_CHECK_STU.map(n=>`<th>${n}</th>`).join('')}</tr></thead>
+    <tbody>${q.items.map((it, r)=>`<tr>
+      <td class="st"><span class="n">${r+1}</span>${escHtml(it.body)}</td>
+      ${q.pats.map(p=>`<td>${p[r] ? '✓' : ''}</td>`).join('')}
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
 // <보기> 상자 (보기형 · 벤다이어그램 · 순서도 공용)
 function mockBoxList(q){
   return `<div class="mock-boxes">
     <div class="mock-boxes-t">&lt; 보 기 &gt;</div>
     ${q.items.map(it=>`<div class="mock-box-row">
       <span class="mk">${it.mark}.</span>
-      <span class="tx"><b class="mock-lb">${it.zone ? it.zone : it.label} :</b> ${escHtml(it.body)}</span>
+      <span class="tx">${(it.zone || it.label) ? `<b class="mock-lb">${it.zone ? it.zone : it.label} :</b> ` : ''}${escHtml(it.body)}</span>
     </div>`).join('')}
   </div>`;
 }
@@ -1099,13 +1207,16 @@ function mockChoiceHtml(c){
   return (c.label ? `<b class="mock-lb">${c.label} :</b> ` : '') + escHtml(c.body);
 }
 function mockQName(q){
-  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique') return q.who.join(' · ');
-  if(q.type === 'pair' || q.type === 'box' || q.type === 'venn' || q.type === 'algo') return q.a + ' · ' + q.b;
+  if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique' || q.type === 'trioAlgo') return q.who.join(' · ');
+  if(q.type === 'pair' || q.type === 'box' || q.type === 'venn' || q.type === 'algo'
+     || q.type === 'qpair' || q.type === 'qbox') return q.a + ' · ' + q.b;
   return q.name;
 }
 const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'갑·을 대조',
                           box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조',
-                          trioVenn:'3중 벤다이어그램', critique:'서로에 대한 비판' };
+                          trioVenn:'3중 벤다이어그램', critique:'서로에 대한 비판',
+                          qsolo:'대답할 질문', qpair:'갑 긍정·을 부정', qbox:'모두 같은 대답',
+                          check:'학생 체크표', trioAlgo:'3중 순서도' };
 // 기출이 아니라 우리가 만든 선지라는 표시. 채점 해설에서 늘 보인다
 // 선지의 출처 이름. 문항에 src가 없으면 원본 선지(id)에서 찾는다
 function mockSrcOf(it){
@@ -1133,6 +1244,7 @@ function mockSrcNote(it){
 // 채점 화면에서 선지 문장 자체가 맞는 말인지
 function mockChoiceTruth(q, ci){
   if(q.type === 'wrong') return ci !== q.ans;
+  if(q.type === 'qsolo') return q.neg ? (ci !== q.ans) : (ci === q.ans);
   return ci === q.ans;
 }
 function mockStarBtn(id){
@@ -1492,13 +1604,32 @@ function renderMockReview(q, i, run){
     ${run.per[i] ? `<span class="mock-rv-time">${mockFmtDur(run.per[i])}</span>` : ''}`;
 
   let body;
-  if(boxType){
+  if(q.type === 'check'){
+    body = `
+      <div class="mock-boxes">
+        <div class="mock-boxes-t">&lt; 입 장 &gt;</div>
+        ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
+          <span class="mk">${it.mark}.</span>
+          <span class="tx">${escHtml(it.body)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
+            ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${mockSrcNote(it)}
+            ${mockSrcLine(it)}
+            ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
+          </span>
+        </div>`).join('')}
+      </div>
+      <div class="mock-rv-line ok"><span class="mk">${MOCK_MARK[q.ans]}</span>
+        <div><div class="lb">정답</div><div>${MOCK_CHECK_STU[q.ans]} — ${q.items.map((it,r)=> it.ok ? (r+1) : null).filter(x=>x!==null).join(', ')}번에만 체크</div></div></div>
+      ${(!blank && !ok) ? `<div class="mock-rv-line no"><span class="mk">${MOCK_MARK[picked]}</span>
+        <div><div class="lb">OMR에 마킹한 것</div><div>${MOCK_CHECK_STU[picked]}</div></div></div>` : ''}`;
+  } else if(boxType){
     body = `
       <div class="mock-boxes">
         <div class="mock-boxes-t">&lt; 보 기 &gt;</div>
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
-          <span class="tx"><b class="mock-lb">${it.zone?it.zone:it.label} :</b> ${escHtml(it.body)}
+          <span class="tx">${(it.zone || it.label) ? `<b class="mock-lb">${it.zone?it.zone:it.label} :</b> ` : ''}${escHtml(it.body)}
             <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
