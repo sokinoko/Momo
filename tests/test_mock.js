@@ -35,7 +35,7 @@ const start = appSrc.indexOf('const MOCK_SIZES');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO|MOCK_TRIO_PERM|MOCK_CHECK_STU|MOCK_ALIAS|MOCK_CATS)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO|MOCK_TRIO_PERM|MOCK_CHECK_STU|MOCK_TRIO_ALGO_SHAPES|MOCK_ALIAS|MOCK_CATS)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE').replace(/^let MOCK_CAT_OF/m, 'global.MOCK_CAT_OF')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
@@ -143,6 +143,7 @@ function trioSet(who){
 }
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
 let qsoloQ = 0, checkQ = 0, qpairQ = 0, qboxQ = 0, trioAlgoQ = 0;
+const shapeHist = {};
 let trioVennQ = 0, critQ = 0;
 const algoHist = {}, vennHist = {};
 for(let d=1; d<=40 * SIZES.length; d++){
@@ -367,22 +368,32 @@ for(let d=1; d<=40 * SIZES.length; d++){
       ok(new Set(q.items.map(x=>x.body)).size === 4, tag + ' 보기 문장 중복');
       const tt = q.items.map((x,ix)=>x.ok?ix:-1).filter(x=>x>=0).join(',');
       ok(q.opts[q.ans].join(',') === tt, tag + ' 정답 조합 불일치');
-      const [A3, B3, C3] = q.who;
-      q.items.forEach(it=>{
+      const shape = MOCK_TRIO_ALGO_SHAPES.filter(x=> x.k === q.shape)[0];
+      ok(!!shape, tag + ' 모르는 순서도 모양 ' + q.shape);
+      shapeHist[q.shape] = (shapeHist[q.shape] || 0) + 1;
+      if(shape) q.items.forEach(it=>{
         ok(/(는가\?|인가\?)$/.test(it.body), tag + ' ' + it.mark + ' 질문형이 아님');
-        if(it.zone === 'A'){
-          const p = duoPat(it.plainBody, true);
-          ok(!!p, tag + ' A자리 판정 없음');
-          if(p) ok(((p[A3] + p[B3] + p[C3]) === 'OOX') === it.ok, tag + ' A자리 판정과 O/X 불일치');
-        } else if(it.zone === 'B'){
-          const p = duoPat(it.plainBody);
-          ok(!!p, tag + ' B자리 판정 없음');
-          if(p) ok(((p[A3] + p[B3]) === 'OX') === it.ok, tag + ' B자리 판정과 O/X 불일치');
-        } else {
-          const who = (it.zone === 'C') ? B3 : C3;
-          ok(own(oxById[it.id].text, who) && oxById[it.id].answer === (it.ok ? 'O' : 'X'),
-             tag + ' ' + it.zone + '자리 오류');
+        const spec = shape.slots[it.zone];
+        if(spec[0] === 'solo'){
+          // 한 사람 자리 — 그 사람의 선지여야 하고 O/X 가 자리와 맞아야 한다
+          ok(own(oxById[it.id].text, q.who[spec[1]]) && oxById[it.id].answer === (it.ok ? 'O' : 'X'),
+             tag + ' ' + it.zone + '자리(' + q.shape + ') 오류');
+          return;
         }
+        const p = duoPat(it.plainBody);
+        ok(!!p, tag + ' ' + it.zone + '자리 판정 없음');
+        if(!p) return;
+        const at = i=> p[q.who[i]];
+        let fit;
+        if(spec[0] === 'trio'){
+          const k = (at(0)||'-') + (at(1)||'-') + (at(2)||'-');
+          ok(k.indexOf('-') < 0, tag + ' ' + it.zone + '자리 세 판정이 다 있지 않음');
+          fit = (k === spec[1]);
+        } else {
+          ok(!!at(spec[1]) && !!at(spec[2]), tag + ' ' + it.zone + '자리 두 판정이 다 있지 않음');
+          fit = ((at(spec[1]) + at(spec[2])) === spec[3]);
+        }
+        ok(fit === it.ok, tag + ' ' + it.zone + '자리(' + q.shape + ') 판정과 O/X 불일치');
       });
     } else {
       soloQ++;
@@ -536,6 +547,8 @@ console.log('검사한 문항 ' + totalQ + '개 — 단독 ' + soloQ + ' · 갑�
             ' · 3중벤 ' + trioVennQ + ' · 비판 ' + critQ);
 console.log('  새 유형 — 질문형단독 ' + qsoloQ + ' · 체크표 ' + checkQ + ' · 질문형갑을 ' + qpairQ +
             ' · 질문형보기 ' + qboxQ + ' · 3중순서도 ' + trioAlgoQ);
+console.log('  3중 순서도 모양 — ' + MOCK_TRIO_ALGO_SHAPES.map(s=> s.k + ' ' + (shapeHist[s.k] || 0)).join(' · '));
+MOCK_TRIO_ALGO_SHAPES.forEach(s=> ok((shapeHist[s.k] || 0) > 0, '3중 순서도 모양 ' + s.k + ' 가 한 번도 안 나옴'));
 const hist = (h)=> Object.keys(h).sort().map(k=> k + '문항 ' + h[k] + '세트').join(' · ');
 console.log('세트별 순서도 — ' + hist(algoHist));
 console.log('세트별 벤     — ' + hist(vennHist));

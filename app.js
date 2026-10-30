@@ -1812,62 +1812,83 @@ function buildCheckQ(n, rng){
 }
 
 /* ---------- 3중 순서도 ----------
-   그림 구조
-     [갑, 을, 병의 입장을 탐구한다]
-             ↓
-             A ──아니요──→ D ──예──→ [병의 입장]
-             │예
-             B ──아니요──→ C ──예──→ [을의 입장]
-             │예
-        [갑의 입장]
-   그러므로 각 자리에 들어갈 질문의 조건은 이렇다.
-     A : 갑 예 · 을 예 · 병 아니요   → 세 사람 판정이 OOX 인 문장
-     B : 갑 예 · 을 아니요           → 갑·을 판정이 OX 인 문장
-     C : 을 예                       → 을의 O선지
-     D : 병 예                       → 병의 O선지
-   거짓 보기는 각 자리의 조건을 어기는 문장을 넣으면 된다. */
-function mockTrioAlgoPat(set, a, b, c, want){
-  return set.list.filter(p=>{
-    const k = (p.ans[a]||'-') + (p.ans[b]||'-') + (p.ans[c]||'-');
-    return k.indexOf('-') < 0 && (want ? k === 'OOX' : k !== 'OOX');
-  });
+   평가원·사설이 쓰는 갈림길 모양은 하나가 아니다. 세 모양을 두고 세트마다 뽑는다.
+   자리마다 「어떤 판정이어야 하는가」가 다르므로 모양이 바뀌면 재료도 바뀐다.
+
+   right  A ─아니요→ D ─예→ 병 / A ─예→ B ─아니요→ C ─예→ 을 / B ─예→ 갑
+          A 는 갑·을이 예, 병이 아니요
+   left   A ─예→ 갑 / A ─아니요→ B ─예→ C ─예→ 을 / B ─아니요→ D ─예→ 병
+          A 는 갑만 예
+   chain  A ─예→ B ─예→ 갑 / B ─아니요→ C ─예→ 을 / C ─아니요→ D ─예→ 병
+          A 는 셋 다 예인 공통 질문
+
+   자리 조건은 셋 가운데 하나다.
+     trio <패턴>  세 사람 판정이 그 패턴이어야 한다 (갑·을·병 순)
+     duo  <둘><패턴>  두 사람 판정이 그 패턴이어야 한다
+     solo <한 사람>  그 사람의 O선지
+   거짓 보기는 그 조건을 어기는 문장을 넣는다. */
+const MOCK_TRIO_ALGO_SHAPES = [
+  { k:'right', slots:{ A:['trio','OOX'], B:['duo',0,1,'OX'], C:['solo',1], D:['solo',2] } },
+  { k:'left',  slots:{ A:['trio','OXX'], B:['duo',1,2,'OX'], C:['solo',1], D:['solo',2] } },
+  { k:'chain', slots:{ A:['trio','OOO'], B:['trio','OXX'], C:['duo',1,2,'OX'], D:['solo',2] } },
+];
+function mockTrioAlgoShape(k){
+  return MOCK_TRIO_ALGO_SHAPES.filter(s=> s.k === k)[0] || MOCK_TRIO_ALGO_SHAPES[0];
 }
-function buildTrioAlgoQ(a, b, c, unit, rng, pairTopic){
+// 한 문장이 그 자리의 조건에 맞는가
+function mockTrioAlgoFit(p, spec, who){
+  const at = i=> p.ans[who[i]];
+  if(spec[0] === 'trio'){
+    const k = (at(0) || '-') + (at(1) || '-') + (at(2) || '-');
+    return k.indexOf('-') < 0 ? (k === spec[1]) : null;      // 판정이 모자라면 쓸 수 없다
+  }
+  if(spec[0] === 'duo'){
+    const x = at(spec[1]), y = at(spec[2]);
+    return (x && y) ? ((x + y) === spec[3]) : null;
+  }
+  return at(spec[1]) ? (at(spec[1]) === 'O') : null;
+}
+function buildTrioAlgoQ(a, b, c, unit, rng, pairTopic, shapeKey){
   const pool = mockPool();
   const set = mockTrioOf(a, b, c);
   if(!set) return null;
-  const B = pool.byName[b], C = pool.byName[c];
-  if(!B || !C) return null;
-  const duoAB = mockDuoOf(a, b);
-  if(!duoAB) return null;
-  const flip = duoAB.who[0] !== a;
-  const duo = (k)=> duoAB[flip ? { OX:'XO', OO:'OO', XO:'OX', XX:'XX' }[k] : k];
-
+  const who = [a, b, c];
+  if(who.some(n=> !pool.byName[n])) return null;
+  // 모양을 정해 주지 않으면 세 모양을 섞어 차례로 본다 — 재료가 되는 모양으로 만든다
+  const shapes = shapeKey ? [mockTrioAlgoShape(shapeKey)] : shuffleSeeded(MOCK_TRIO_ALGO_SHAPES, rng);
   const opt = mockOptSet(rng);
+  for(let si=0; si<shapes.length; si++){
+    const q = mockTrioAlgoWith(shapes[si], who, pool, set, opt, rng, unit, pairTopic);
+    if(q) return q;
+  }
+  return null;
+}
+function mockTrioAlgoWith(shape, who, pool, set, opt, rng, unit, pairTopic){
+  const [a, b, c] = who;
   const used = {};
   const zones = ['A','B','C','D'];
   const items = [];
   for(let i=0;i<4;i++){
     const isTrue = opt.idx.indexOf(i) >= 0;
     const z = zones[i];
+    const spec = shape.slots[z];
     let pick = null;
-    if(z === 'A'){
-      pick = mockPickDuo(shuffleSeeded(mockTrioAlgoPat(set, a, b, c, isTrue), rng), used, a);
-    } else if(z === 'B'){
-      const src = isTrue ? duo('OX') : duo('OO').concat(duo('XO'), duo('XX'));
-      pick = mockPickDuo(shuffleSeeded(src, rng), used, a);
-    } else {
-      const who = (z === 'C') ? b : c;
-      const bn = (z === 'C') ? B : C;
+    if(spec[0] === 'solo'){
+      // 한 사람 자리는 그 사람의 선지에서 바로 뽑는다 — 판정 묶음을 거치지 않아 재료가 넓다
+      const bn = pool.byName[who[spec[1]]];
       pick = mockPickQ(shuffleSeeded(isTrue ? bn.O : bn.X, rng), used);
-      if(pick) pick = Object.assign({}, pick, { who:who });
+      if(pick) pick = Object.assign({}, pick, { who:who[spec[1]] });
+    } else {
+      const src = shuffleSeeded(set.list.filter(p=> mockTrioAlgoFit(p, spec, who) === isTrue), rng);
+      // 해설·출처는 그 자리가 가리키는 첫 사람의 선지에서 끌어온다
+      pick = mockPickDuo(src, used, who[spec[0] === 'duo' ? spec[1] : 0]);
     }
     if(!pick) return null;
     items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue }));
   }
-  const ps = [a, b, c].map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
+  const ps = who.map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
   if(ps.some(x=> !x)) return null;
-  return { type:'trioAlgo', who:[a, b, c], unit:unit, pairTopic:pairTopic||null,
+  return { type:'trioAlgo', who:who, shape:shape.k, unit:unit, pairTopic:pairTopic||null,
            psList:ps, items:items, opts:opt.opts, ans:opt.ans };
 }
 

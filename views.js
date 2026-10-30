@@ -971,7 +971,7 @@ function mockFigFor(q){
   if(q.type === 'algo') return mockAlgoFig();
   if(q.type === 'trioVenn') return mockTrioVennFig(q.zones);
   if(q.type === 'critique') return mockCritiqueFig();
-  if(q.type === 'trioAlgo') return mockTrioAlgoFig();
+  if(q.type === 'trioAlgo') return mockTrioAlgoFig(q.shape);
   if(q.type === 'check') return mockCheckFig(q);
   return '';
 }
@@ -1106,47 +1106,76 @@ function mockAlgoFig(){
     <text x="420" y="178" text-anchor="middle" font-size="11.5" fill="currentColor">을의 입장</text>
   </svg></div>`;
 }
-/* (나) 3중 순서도 — 갈림길 넷으로 세 사람을 가른다
-     A 아니요→ D 예→ 병   /   A 예→ B 아니요→ C 예→ 을   /   B 예→ 갑 */
-function mockTrioAlgoFig(){
-  return `<div class="mock-fig"><svg viewBox="0 0 560 256" width="100%" style="max-width:480px" xmlns="http://www.w3.org/2000/svg"
-      role="img" aria-label="갑 을 병의 입장을 가르는 순서도. A에서 아니요면 D를 거쳐 병, 예면 B로 간다. B에서 아니요면 C를 거쳐 을, 예면 갑이다">
-    <rect x="80" y="4" width="240" height="26" rx="3" fill="none" stroke="currentColor"/>
-    <text x="200" y="21" text-anchor="middle" font-size="11.5" fill="currentColor">사상가 갑, 을, 병의 입장을 탐구한다.</text>
-    <line x1="200" y1="30" x2="200" y2="44" stroke="currentColor"/>
-
-    <polygon points="200,44 256,66 200,88 144,66" fill="none" stroke="currentColor"/>
-    <text x="200" y="71" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">A</text>
-    <text x="268" y="61" font-size="9.5" fill="currentColor">아니요</text>
-    <line x1="256" y1="66" x2="470" y2="66" stroke="currentColor" stroke-dasharray="4 3"/>
-    <line x1="470" y1="66" x2="470" y2="92" stroke="currentColor" stroke-dasharray="4 3"/>
-    <polygon points="470,92 522,114 470,136 418,114" fill="none" stroke="currentColor"/>
-    <text x="470" y="119" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">D</text>
-    <text x="462" y="156" text-anchor="end" font-size="9.5" fill="currentColor">예</text>
-    <line x1="470" y1="136" x2="470" y2="222" stroke="currentColor"/>
-
-    <text x="192" y="101" text-anchor="end" font-size="9.5" fill="currentColor">예</text>
-    <line x1="200" y1="88" x2="200" y2="102" stroke="currentColor"/>
-    <polygon points="200,102 256,124 200,146 144,124" fill="none" stroke="currentColor"/>
-    <text x="200" y="129" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">B</text>
-    <text x="268" y="119" font-size="9.5" fill="currentColor">아니요</text>
-    <line x1="256" y1="124" x2="330" y2="124" stroke="currentColor" stroke-dasharray="4 3"/>
-    <line x1="330" y1="124" x2="330" y2="152" stroke="currentColor" stroke-dasharray="4 3"/>
-    <polygon points="330,152 382,174 330,196 278,174" fill="none" stroke="currentColor"/>
-    <text x="330" y="179" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">C</text>
-    <text x="322" y="216" text-anchor="end" font-size="9.5" fill="currentColor">예</text>
-    <line x1="330" y1="196" x2="330" y2="222" stroke="currentColor"/>
-
-    <text x="192" y="216" text-anchor="end" font-size="9.5" fill="currentColor">예</text>
-    <line x1="200" y1="146" x2="200" y2="222" stroke="currentColor"/>
-
-    <rect x="146" y="222" width="108" height="24" rx="12" fill="none" stroke="currentColor"/>
-    <text x="200" y="238" text-anchor="middle" font-size="11.5" fill="currentColor">갑의 입장</text>
-    <rect x="276" y="222" width="108" height="24" rx="12" fill="none" stroke="currentColor"/>
-    <text x="330" y="238" text-anchor="middle" font-size="11.5" fill="currentColor">을의 입장</text>
-    <rect x="416" y="222" width="108" height="24" rx="12" fill="none" stroke="currentColor"/>
-    <text x="470" y="238" text-anchor="middle" font-size="11.5" fill="currentColor">병의 입장</text>
-  </svg></div>`;
+/* (나) 3중 순서도 — 모양이 셋이다. 자리 조건이 모양마다 다르므로 그림도 따로 그린다.
+   공용 조각: 마름모 · 결론 상자 · 예/아니요 글자 */
+function mockDia(cx, cy, t){
+  return `<polygon points="${cx},${cy-22} ${cx+52},${cy} ${cx},${cy+22} ${cx-52},${cy}" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">${t}</text>`;
+}
+function mockEnd(cx, y, t){
+  return `<rect x="${cx-54}" y="${y}" width="108" height="24" rx="12" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="${y+16}" text-anchor="middle" font-size="11.5" fill="currentColor">${t}의 입장</text>`;
+}
+function mockYes(x, y, anchor){
+  return `<text x="${x}" y="${y}" text-anchor="${anchor||'end'}" font-size="9.5" fill="currentColor">예</text>`;
+}
+function mockNo(x, y){
+  return `<text x="${x}" y="${y}" font-size="9.5" fill="currentColor">아니요</text>`;
+}
+function mockTrioAlgoFig(shape){
+  const head = (cx)=> `<rect x="${cx-120}" y="4" width="240" height="26" rx="3" fill="none" stroke="currentColor"/>
+    <text x="${cx}" y="21" text-anchor="middle" font-size="11.5" fill="currentColor">사상가 갑, 을, 병의 입장을 탐구한다.</text>`;
+  const dash = 'stroke="currentColor" stroke-dasharray="4 3"';
+  let inner;
+  if(shape === 'left'){
+    // A ─예→ 갑 / A ─아니요→ B ─예→ C ─예→ 을 / B ─아니요→ D ─예→ 병
+    inner = `${head(140)}
+      <line x1="140" y1="30" x2="140" y2="44" stroke="currentColor"/>
+      ${mockDia(140, 66, 'A')}
+      ${mockNo(200, 61)}<line x1="192" y1="66" x2="300" y2="66" ${dash}/><line x1="300" y1="66" x2="300" y2="102" ${dash}/>
+      ${mockYes(132, 101)}<line x1="140" y1="88" x2="140" y2="222" stroke="currentColor"/>
+      ${mockDia(300, 124, 'B')}
+      ${mockNo(360, 119)}<line x1="352" y1="124" x2="450" y2="124" ${dash}/><line x1="450" y1="124" x2="450" y2="152" ${dash}/>
+      ${mockYes(292, 159)}<line x1="300" y1="146" x2="300" y2="152" stroke="currentColor"/>
+      ${mockDia(300, 174, 'C')}
+      ${mockYes(292, 216)}<line x1="300" y1="196" x2="300" y2="222" stroke="currentColor"/>
+      ${mockDia(450, 174, 'D')}
+      ${mockYes(442, 216)}<line x1="450" y1="196" x2="450" y2="222" stroke="currentColor"/>
+      ${mockEnd(140, 222, '갑')}${mockEnd(300, 222, '을')}${mockEnd(450, 222, '병')}`;
+  } else if(shape === 'chain'){
+    // A ─예→ B ─예→ 갑 / B ─아니요→ C ─예→ 을 / C ─아니요→ D ─예→ 병
+    inner = `${head(140)}
+      <line x1="140" y1="30" x2="140" y2="44" stroke="currentColor"/>
+      ${mockDia(140, 66, 'A')}
+      ${mockYes(132, 101)}<line x1="140" y1="88" x2="140" y2="102" stroke="currentColor"/>
+      ${mockDia(140, 124, 'B')}
+      ${mockNo(200, 119)}<line x1="192" y1="124" x2="300" y2="124" ${dash}/><line x1="300" y1="124" x2="300" y2="152" ${dash}/>
+      ${mockYes(132, 250)}<line x1="140" y1="146" x2="140" y2="256" stroke="currentColor"/>
+      ${mockDia(300, 174, 'C')}
+      ${mockNo(360, 169)}<line x1="352" y1="174" x2="450" y2="174" ${dash}/><line x1="450" y1="174" x2="450" y2="196" ${dash}/>
+      ${mockYes(292, 250)}<line x1="300" y1="196" x2="300" y2="256" stroke="currentColor"/>
+      ${mockDia(450, 218, 'D')}
+      ${mockYes(442, 250)}<line x1="450" y1="240" x2="450" y2="256" stroke="currentColor"/>
+      ${mockEnd(140, 256, '갑')}${mockEnd(300, 256, '을')}${mockEnd(450, 256, '병')}`;
+  } else {
+    // right(기본) — A ─아니요→ D ─예→ 병 / A ─예→ B ─아니요→ C ─예→ 을 / B ─예→ 갑
+    inner = `${head(200)}
+      <line x1="200" y1="30" x2="200" y2="44" stroke="currentColor"/>
+      ${mockDia(200, 66, 'A')}
+      ${mockNo(260, 61)}<line x1="252" y1="66" x2="450" y2="66" ${dash}/><line x1="450" y1="66" x2="450" y2="92" ${dash}/>
+      ${mockDia(450, 114, 'D')}
+      ${mockYes(442, 156)}<line x1="450" y1="136" x2="450" y2="222" stroke="currentColor"/>
+      ${mockYes(192, 101)}<line x1="200" y1="88" x2="200" y2="102" stroke="currentColor"/>
+      ${mockDia(200, 124, 'B')}
+      ${mockNo(260, 119)}<line x1="252" y1="124" x2="320" y2="124" ${dash}/><line x1="320" y1="124" x2="320" y2="152" ${dash}/>
+      ${mockDia(320, 174, 'C')}
+      ${mockYes(312, 216)}<line x1="320" y1="196" x2="320" y2="222" stroke="currentColor"/>
+      ${mockYes(192, 216)}<line x1="200" y1="146" x2="200" y2="222" stroke="currentColor"/>
+      ${mockEnd(200, 222, '갑')}${mockEnd(320, 222, '을')}${mockEnd(450, 222, '병')}`;
+  }
+  const h = (shape === 'chain') ? 290 : 256;
+  return `<div class="mock-fig"><svg viewBox="0 0 560 ${h}" width="100%" style="max-width:480px" xmlns="http://www.w3.org/2000/svg"
+      role="img" aria-label="갑 을 병의 입장을 가르는 순서도">${inner}</svg></div>`;
 }
 
 // 학생 체크표 — 세로는 입장 넷, 가로는 학생 다섯. 체크한 칸에만 ✓
