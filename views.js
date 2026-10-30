@@ -946,10 +946,17 @@ window.mockPsSrcFn = function(p){
   return l ? `<span class="mock-ps-src">출처 · ${escHtml(l)}</span>` : '';
 }
 function mockPsBox(q, withSrc){
-  // 출처는 제시문 박스 위에 작은 태그로 — 복수 제시문이면 한 줄에 라벨과 함께
+  /* 출처는 제시문 박스 위에 작은 태그로 — 복수 제시문이면 한 줄에 라벨과 함께.
+     범주로 묶인 사람(공화주의의 키케로, 스토아학파의 에픽테토스…)은 문항 이름이
+     범주라서 누구 글인지 알 수 없다. 그럴 때만 사람 이름을 앞에 붙인다. */
   const tag = (list)=>{
     if(!withSrc) return '';
-    const parts = list.map(([lb, p])=>{ const l = mockPsSrcLabel(p); return l ? (lb ? lb + ' ' : '') + escHtml(l) : ''; }).filter(Boolean);
+    const parts = list.map(([lb, p])=>{
+      if(!p) return '';
+      const who = (p.name && mockCanon(p.name, [p.topic]) !== p.name) ? p.name : '';
+      const l = [who, mockPsSrcLabel(p)].filter(Boolean).join(' · ');
+      return l ? (lb ? lb + ' ' : '') + escHtml(l) : '';
+    }).filter(Boolean);
     return parts.length ? `<div class="mock-ps-tag"><span>출처</span>${parts.join(' · ')}</div>` : '';
   };
   if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique' || q.type === 'trioAlgo'){
