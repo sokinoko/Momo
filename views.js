@@ -946,10 +946,17 @@ window.mockPsSrcFn = function(p){
   return l ? `<span class="mock-ps-src">출처 · ${escHtml(l)}</span>` : '';
 }
 function mockPsBox(q, withSrc){
-  // 출처는 제시문 박스 위에 작은 태그로 — 복수 제시문이면 한 줄에 라벨과 함께
+  /* 출처는 제시문 박스 위에 작은 태그로 — 복수 제시문이면 한 줄에 라벨과 함께.
+     범주로 묶인 사람(공화주의의 키케로, 스토아학파의 에픽테토스…)은 문항 이름이
+     범주라서 누구 글인지 알 수 없다. 그럴 때만 사람 이름을 앞에 붙인다. */
   const tag = (list)=>{
     if(!withSrc) return '';
-    const parts = list.map(([lb, p])=>{ const l = mockPsSrcLabel(p); return l ? (lb ? lb + ' ' : '') + escHtml(l) : ''; }).filter(Boolean);
+    const parts = list.map(([lb, p])=>{
+      if(!p) return '';
+      const who = (p.name && mockCanon(p.name, [p.topic]) !== p.name) ? p.name : '';
+      const l = [who, mockPsSrcLabel(p)].filter(Boolean).join(' · ');
+      return l ? (lb ? lb + ' ' : '') + escHtml(l) : '';
+    }).filter(Boolean);
     return parts.length ? `<div class="mock-ps-tag"><span>출처</span>${parts.join(' · ')}</div>` : '';
   };
   if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique' || q.type === 'trioAlgo'){
@@ -1231,6 +1238,32 @@ function mockSrcLine(it){
 }
 function mockMineTag(it){
   return (it && mockSrcOf(it) === '자체 제작') ? `<span class="mock-mine">자체 제작</span>` : '';
+}
+/* 선지 본문 맨 앞에 적힌 이름을 그대로 읽는다 — 「A와 B는 모두」면 둘 다 */
+function mockRawNames(text){
+  const names = mockNameList();
+  const out = [];
+  let rest = text;
+  for(let k=0;k<2;k++){
+    let hit = '';
+    for(let i=0;i<names.length;i++){ if(rest.indexOf(names[i]) === 0){ hit = names[i]; break; } }
+    if(!hit) break;
+    out.push(hit);
+    rest = rest.slice(hit.length);
+    if(rest[0] === '와' || rest[0] === '과') rest = rest.slice(1).replace(/^\s+/, '');
+    else break;
+  }
+  return out;
+}
+/* 범주·별칭으로 묶인 선지는 문항 이름표가 범주라서 누가 한 말인지 안 보인다.
+   공화주의 문항의 페팃·키케로, 스토아학파의 에픽테토스, 왕수인의 양명, 자유주의의 밀 —
+   그럴 때만 선지 옆에 실제 이름을 달아 준다. 본이름 그대로인 선지에는 안 붙인다. */
+function mockWhoTag(it){
+  if(!it || !it.id) return '';
+  const o = (typeof mockItemById === 'function') ? mockItemById(it.id) : null;
+  if(!o || !o.text) return '';
+  const raw = mockRawNames(o.text).filter(n=> mockCanon(n, o.topics || []) !== n);
+  return raw.length ? `<span class="mock-who">${escHtml(raw.join(' · '))}</span>` : '';
 }
 // 자체 제작 선지가 근거로 삼은 원전 한 줄. 기출이 아니라 어디서 왔는지 보이게 한다
 function mockSrcNote(it){
@@ -1611,7 +1644,7 @@ function renderMockReview(q, i, run){
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
           <span class="tx">${escHtml(it.body)}
-            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${mockSrcNote(it)}
             ${mockSrcLine(it)}
@@ -1630,7 +1663,7 @@ function renderMockReview(q, i, run){
         ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
           <span class="mk">${it.mark}.</span>
           <span class="tx">${(it.zone || it.label) ? `<b class="mock-lb">${it.zone?it.zone:it.label} :</b> ` : ''}${escHtml(it.body)}
-            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockMineTag(it)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
             ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
             ${mockSrcNote(it)}
@@ -1666,7 +1699,7 @@ function renderMockReview(q, i, run){
           <span class="mk">${MOCK_MARK[ci]}</span>
           <div class="tx">
             ${(isAns || isMine || (slip && ci === pen)) ? `<div class="lb">${[isAns?'정답':'', isMine?'OMR 마킹':'', (slip && ci === pen)?'시험지 표시':''].filter(Boolean).join(' · ')}</div>` : ''}
-            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockMineTag(c)}</div>
+            <div>${mockChoiceHtml(c)} <span class="ox ${truth?'t':'f'}">${truth?'O':'X'}</span>${mockStarBtn(c.id)}${mockWhoTag(c)}${mockMineTag(c)}</div>
             ${notes}
             ${open ? mockSrcLine(c) : ''}
           </div>

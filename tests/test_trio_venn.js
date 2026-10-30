@@ -12,7 +12,28 @@ const fs = require('fs');
 const APP = __dirname + '/..';
 const PASSAGES = JSON.parse(fs.readFileSync(APP + '/passages.json', 'utf8'));
 const CMP = JSON.parse(fs.readFileSync(APP + '/cmp_items.json', 'utf8'));
-const names = [...new Set(PASSAGES.map(p => p.name))].sort((a, b) => b.length - a.length);
+/* 이름 목록은 app.js 의 mockNameList 와 같아야 한다 — 제시문 이름뿐 아니라
+   별칭(양명)과 범주 이름·구성원(공화주의·위정척사·온건개화파…)까지 넣는다.
+   제시문 이름만 읽으면 「위정척사는 ~」 같은 삼중 선지가 통째로 파싱되지 않는다. */
+const APPSRC = fs.readFileSync(APP + '/app.js', 'utf8');
+function constBlock(key, end){
+  const i = APPSRC.indexOf('const ' + key + ' = {');
+  return i < 0 ? '' : APPSRC.slice(i).split(end, 1)[0];
+}
+const names = (()=>{
+  const set = new Set(PASSAGES.map(p => p.name));
+  const alias = constBlock('MOCK_ALIAS', '};');
+  (alias.match(/'([^']+)'\s*:\s*'([^']+)'/g) || []).forEach(s=>{
+    const m = /'([^']+)'\s*:\s*'([^']+)'/.exec(s); set.add(m[1]); set.add(m[2]);
+  });
+  const cats = constBlock('MOCK_CATS', '\n};');
+  let m, re = /'([^']+)'\s*:\s*\[([^\]]*)\]/g;
+  while((m = re.exec(cats))){
+    set.add(m[1]);
+    (m[2].match(/'([^']+)'/g) || []).forEach(x=> set.add(x.replace(/'/g, '')));
+  }
+  return [...set].sort((a, b) => b.length - a.length);
+})();
 
 // app.js mockSplit 과 같은 규칙
 function split(text){

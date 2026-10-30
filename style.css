@@ -1315,3 +1315,12 @@ mark.ps-clue{
 .mock-check{ table-layout:fixed; }
 .mock-check thead th:not(.h), .mock-check tbody td:not(.st){ width:1.75em; font-weight:700; }
 .mock-check td.st{ padding:6px 6px; }
+
+/* 범주로 묶인 선지의 실제 사상가 이름 — 자체 제작 딱지와 같은 꼴, 색만 다르다 */
+.mock-who{
+  display:inline-block; margin-left:5px; vertical-align:1px;
+  padding:1px 5px; border-radius:3px;
+  border:1px solid var(--rule-strong); background:var(--blue-tint);
+  font-family:var(--font-note); font-size:10.5px; line-height:1.5;
+  color:var(--blue); letter-spacing:-.2px; white-space:nowrap;
+}
