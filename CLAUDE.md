@@ -1,18 +1,23 @@
 # 윤리와 사상 노트 — Claude Code 안내
 
-형석(고3, 수능 윤리와 사상)이 쓰는 학습 웹앱. 폰 홈 화면에 붙여 쓰는 **단일 HTML**이다.
+형석(고3, 수능 윤리와 사상)이 쓰는 학습 웹앱. 폰 홈 화면에 붙여 쓰는 웹앱이다.
 응답은 한국어, 반말로 짧게. 결과는 "무엇이 바뀌었나"부터 말한다.
 자세한 역사·데이터 현황은 `docs/인수인계.md` (필요할 때만 읽기).
 
 ## 구조
 - `app.js` 엔진(상태·OX·제시문·모의고사) / `views.js` 화면 / `style.css`
 - `topics_all.json` 필기 37주제 · `ox_items.json` 선지 · `passages.json` 제시문
-- `build.py` → 위 전부를 `ethics_note.html` 한 파일로 묶는다
+- `build.py` → **껍데기 `ethics_note.html`(0.4 MB)** + **`data.js`(3.7 MB)** + `sw.js` + `manifest.webmanifest`
+  - 전에는 한 파일에 다 넣어 4.5 MB였다. 앱을 열 때마다 그걸 통째로 다시 받느라
+    폰에서 **매번 6.5초**(4G·폰 CPU 기준)가 걸렸다. 지금은 껍데기만 먼저 받아 그리고,
+    데이터는 뒤따라 받되 서비스 워커가 캐시에 남긴다 — **두 번째부터 1.2초**.
+  - 그래서 **데이터를 html 안에 다시 집어넣지 않는다.** 크기가 커질수록 손해가 커진다.
+  - `sw.js`의 `VER`는 빌드 내용의 해시다. 내용이 바뀌면 옛 캐시를 버리고 새로 받는다.
 - `tests/test_mock.js` 모의고사 회귀 테스트 · `src_2027_9/ps_add.py` 제시문 추가 모듈
 
 ## 명령
 ```bash
-python3 build.py                 # ethics_note.html (커밋하지 않음)
+python3 build.py                 # ethics_note.html · data.js · sw.js (커밋하지 않음)
 for t in tests/test_*.js; do node "$t" | tail -1; done
 ```
 테스트는 셋이다 — `test_mock.js`(출제기) · `test_trio_venn.js`(3중 벤 재료) ·
