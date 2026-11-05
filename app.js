@@ -720,8 +720,10 @@ function setMockSize(n){
 /* 유형 추첨 가중치. 나머지(합이 1에 모자란 몫)는 갑·을 문항이 가져간다.
    질문형 넷과 3중 순서도는 할당(쿼터)을 주지 않고 이 추첨으로만 나온다 —
    자리를 따로 떼 두면 단독·갑을이 그만큼 밀려나기 때문이다. */
-const MOCK_MIX = { right:0.20, wrong:0.14, box:0.13, venn:0.05, algo:0.04, trio:0.06, critique:0.05,
-                   qsolo:0.05, qpair:0.04, qbox:0.03, check:0.04, trioAlgo:0.04 };
+const MOCK_MIX = { right:0.13, wrong:0.09, box:0.09, venn:0.05, algo:0.04, trio:0.05, critique:0.04,
+                   qsolo:0.04, qpair:0.03, qbox:0.03, check:0.03, trioAlgo:0.04,
+                   solobox:0.06, qsolobox:0.02, score:0.03, essay:0.02,
+                   same:0.04, samebox:0.03, crit2:0.04 };
 
 let MOCK_CACHE = null;
 
@@ -1136,7 +1138,9 @@ function buildMockSet(){
 
     let roll = rng(), acc = 0, type = 'pair';
     const order2 = ['right','wrong','box','venn','algo','trio','critique',
-                    'qsolo','qpair','qbox','check','trioAlgo'];
+                    'qsolo','qpair','qbox','check','trioAlgo',
+                    'solobox','qsolobox','score','essay',
+                    'same','samebox','crit2'];
     for(let t=0;t<order2.length;t++){
       acc += MOCK_MIX[order2[t]];
       if(roll < acc){ type = order2[t]; break; }
@@ -1180,15 +1184,20 @@ function buildMockSet(){
       type = 'pair';
     }
 
-    // 질문형 단독 · 학생 체크표 — 그 사람 혼자로 만든다
-    if(type === 'qsolo' || type === 'check'){
-      const q = (type === 'qsolo') ? buildQSoloQ(n, rng) : buildCheckQ(n, rng);
+    // 질문형 단독 · 학생 체크표 · 1인 보기형 · 1인 질문형 보기 · 점수 환산 — 그 사람 혼자로 만든다
+    if(type === 'qsolo' || type === 'check' || type === 'solobox'
+       || type === 'qsolobox' || type === 'score'){
+      const q = (type === 'qsolo')    ? buildQSoloQ(n, rng)
+              : (type === 'check')    ? buildCheckQ(n, rng)
+              : (type === 'score')    ? buildScoreQ(n, rng)
+              : buildSoloBoxQ(n, rng, type === 'qsolobox');
       if(q){ qs.push(q); used[n] = 1; continue; }
       type = 'pair';
     }
 
-    // 질문형 갑을 · 질문형 보기 — 두 사람 판정이 한 문장에 다 있는 짝에서만
-    if(type === 'qpair' || type === 'qbox'){
+    // 질문형 갑을·보기 · 공통된 입장 · 1:1 비판 — 두 사람 판정이 한 문장에 다 있는 짝에서만
+    if(type === 'qpair' || type === 'qbox' || type === 'same'
+       || type === 'samebox' || type === 'crit2'){
       const mateOk = m=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n, m)
                       && pool.pairable.indexOf(m) >= 0;
       const duo = mockDuoSets();
@@ -1199,8 +1208,12 @@ function buildMockSet(){
         .filter(mateOk), rng);
       let qq = null;
       for(let i=0;i<mates.length && i<6 && !qq;i++){
-        qq = (type === 'qpair') ? buildQPairQ(n, mates[i], mockMainUnit(n), rng, null)
-                                : buildQBoxQ(n, mates[i], mockMainUnit(n), rng, null);
+        const u = mockMainUnit(n);
+        qq = (type === 'qpair')   ? buildQPairQ(n, mates[i], u, rng, null)
+           : (type === 'qbox')    ? buildQBoxQ(n, mates[i], u, rng, null)
+           : (type === 'same')    ? buildSameQ(n, mates[i], u, rng, null, false)
+           : (type === 'samebox') ? buildSameQ(n, mates[i], u, rng, null, true)
+                                  : buildCrit2Q(n, mates[i], u, rng, null);
         if(qq){ used[n] = 1; used[mates[i]] = 1; }
       }
       if(qq){ qs.push(qq); continue; }
@@ -1258,6 +1271,27 @@ function buildMockSet(){
         }
       }
       if(type === 'trio') type = 'pair';
+    }
+
+    // 서술형 평가 — ㉤ 자리가 「갑과 을은 모두」 선지라 공통 선지가 있는 짝에서만 만들어진다.
+    // 한 짝만 보고 포기하면 거의 안 나오므로 짝을 여러 번 바꿔 본다
+    if(type === 'essay'){
+      const unitE = mockMainUnit(n);
+      const mateOkE = m=> m !== n && !used[m] && !mockSoloOnly(m) && !mockSameSchool(n, m)
+                       && pool.pairable.indexOf(m) >= 0;
+      const matesE = shuffleSeeded((pool.unitMembers[unitE] || [])
+        .concat(mockIdeoMates(n))
+        .filter((m, i, a)=> a.indexOf(m) === i)
+        .filter(mateOkE)
+        // ㉤ 자리가 「갑과 을은 모두」 선지라 공통 선지가 있는 짝만 후보다
+        .filter(m=>{ const pr = pool.pairs[mockPairKey(n, m)]; return pr && pr.O.length; }), rng);
+      let eq = null;
+      for(let i=0;i<matesE.length && i<6 && !eq;i++){
+        eq = buildEssayQ(n, matesE[i], unitE, rng, null);
+        if(eq){ used[n] = 1; used[matesE[i]] = 1; }
+      }
+      if(eq){ qs.push(eq); continue; }
+      type = 'pair';
     }
 
     if(type === 'box' || type === 'pair'){
@@ -1768,6 +1802,20 @@ function mockDuoItem(p, who, qbody){
   return { body:qbody, id:p.id[who] || '', note:p.note[who] || '',
            plainBody:p.body, pat:p.ans, noteOf:p.note, idOf:p.id };
 }
+/* 질문으로 돌리지 않고 평서문 그대로 꺼낸다 — 공통된 입장·1:1 비판에 쓴다.
+   conv 를 주면 그 꼴로 바꿔 쓰고, 바꿀 수 없는 문장은 건너뛴다. */
+function mockPickDuoPlain(list, used, who, conv){
+  for(let i=0;i<list.length;i++){
+    const p = list[i];
+    if(used[p.body]) continue;
+    if(mockExcluded(p.id[who])) continue;
+    const body = conv ? conv(p.body) : p.body;
+    if(!body) continue;
+    used[p.body] = 1;
+    return mockDuoItem(p, who, body);
+  }
+  return null;
+}
 function mockPickDuo(list, used, who){
   for(let i=0;i<list.length;i++){
     const p = list[i];
@@ -1789,10 +1837,12 @@ function buildQPairQ(a, b, unit, rng, pairTopic){
   const flip = d.who[0] !== a;                   // 묶음은 이름순이라 갑·을 자리를 맞춘다
   const pat = (k)=> shuffleSeeded(d[flip ? { OO:'OO', OX:'XO', XO:'OX', XX:'XX' }[k] : k], rng);
   const used = {};
-  // 정답은 「갑 예 · 을 아니요」. 오답은 둘 다 예 · 둘 다 아니요 · 갑만 아니요
-  const ansItem = mockPickDuo(pat('OX'), used, a);
+  // 기출은 「갑은 긍정, 을은 부정」과 그 반대를 모두 쓴다
+  const rev = rng() < 0.4;
+  // 정답은 찾는 패턴. 오답은 둘 다 예 · 둘 다 아니요 · 거꾸로
+  const ansItem = mockPickDuo(pat(rev ? 'XO' : 'OX'), used, a);
   if(!ansItem) return null;
-  const wrongSrc = shuffleSeeded(pat('OO').concat(pat('XO'), pat('XX')), rng);
+  const wrongSrc = shuffleSeeded(pat('OO').concat(pat(rev ? 'OX' : 'XO'), pat('XX')), rng);
   const dist = [];
   for(let i=0;i<4;i++){
     const w = mockPickDuo(wrongSrc, used, a);
@@ -1804,10 +1854,10 @@ function buildQPairQ(a, b, unit, rng, pairTopic){
   const deco = (it, isAns)=> Object.assign({}, it, {
     notes: [a, b].map((n, i)=> mockAskLine(n, lb[i], it.pat[n], it.noteOf && it.noteOf[n])),
     verdict: mockFitVerdict('답은 ' + mockPatText([a, b], it.pat, lb) + '.',
-                            '「갑 예 · 을 아니요」', isAns, '찾는 것')
+                            rev ? '「갑 아니요 · 을 예」' : '「갑 예 · 을 아니요」', isAns, '찾는 것')
   });
   const choices = shuffleSeeded(dist.map(d=> deco(d, false)).concat([deco(ansItem, true)]), rng);
-  return { type:'qpair', a:a, b:b, unit:unit, pairTopic:pairTopic||null,
+  return { type:'qpair', a:a, b:b, unit:unit, pairTopic:pairTopic||null, rev:rev,
            psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
            choices:choices, ans:choices.map(c=> c.body).indexOf(ansItem.body) };
 }
@@ -1820,11 +1870,13 @@ function buildQBoxQ(a, b, unit, rng, pairTopic){
   const pat = (k)=> shuffleSeeded(d[flip ? { OO:'OO', OX:'XO', XO:'OX', XX:'XX' }[k] : k], rng);
   const set = mockOptSet(rng);
   const used = {};
-  // 「모두 부정」과 「모두 긍정」 두 꼴을 다 쓴다
-  const neg = rng() < 0.5;
-  const yes = shuffleSeeded(pat(neg ? 'XX' : 'OO'), rng);
-  const no  = shuffleSeeded(neg ? pat('OO').concat(pat('OX'), pat('XO'))
-                                : pat('XX').concat(pat('OX'), pat('XO')), rng);
+  // 꼴 셋 — 「모두 긍정」 · 「모두 부정」 · 「모두 공통의 대답」(둘이 같은 답이면 된다)
+  const same = rng() < 0.3;
+  const neg = same ? false : (rng() < 0.5);
+  const yes = shuffleSeeded(same ? pat('OO').concat(pat('XX')) : pat(neg ? 'XX' : 'OO'), rng);
+  const no  = shuffleSeeded(same ? pat('OX').concat(pat('XO'))
+                                 : (neg ? pat('OO').concat(pat('OX'), pat('XO'))
+                                        : pat('XX').concat(pat('OX'), pat('XO'))), rng);
   const items = [];
   for(let i=0;i<4;i++){
     const isTrue = set.idx.indexOf(i) >= 0;
@@ -1835,11 +1887,12 @@ function buildQBoxQ(a, b, unit, rng, pairTopic){
       mark:MOCK_BOX_MARK[i], ok:isTrue,
       notes: [a, b].map((n, k)=> mockAskLine(n, lb[k], pick.pat[n], pick.noteOf && pick.noteOf[n])),
       verdict: mockFitVerdict('답은 ' + mockPatText([a, b], pick.pat, lb) + '.',
-                              '둘 다 「' + (neg ? '아니요' : '예') + '」', isTrue, '찾는 것')
+                              same ? '둘의 대답이 같은 것'
+                                   : ('둘 다 「' + (neg ? '아니요' : '예') + '」'), isTrue, '찾는 것')
     }));
   }
   const A = pool.byName[a], B = pool.byName[b];
-  return { type:'qbox', a:a, b:b, unit:unit, pairTopic:pairTopic||null, neg:neg,
+  return { type:'qbox', a:a, b:b, unit:unit, pairTopic:pairTopic||null, neg:neg, same:same,
            psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
            items:items, opts:set.opts, ans:set.ans };
 }
@@ -1907,6 +1960,258 @@ function buildCheckQ(n, rng){
   });
   return { type:'check', name:n, ps:shuffleSeeded(b.ps, rng)[0],
            items:rows, pats:pats, choices:choices, ans:ans, why:why };
+}
+
+/* ---------- 공통된 입장 · 1:1 비판 ----------
+   기출이 자주 쓰는 발문 꼴 셋을 더 쓴다.
+     same    「갑, 을의 공통된 입장으로 옳은 것은?」              5지선다
+     samebox 「갑, 을의 공통된 입장만을 <보기>에서 …」            보기형
+     crit2   「갑의 입장에서 을에게 제기할 수 있는 비판은?」       5지선다 · 양방향
+   셋 다 두 사람의 O/X 가 한 문장에 다 있어야 하므로 mockDuoOf 를 쓴다.
+   한 사람 판정만 아는 문장을 섞으면 공통인지 아닌지 말할 수 없다. */
+
+// 평서문을 비판 꼴로 — 「P라고 본다.」 → 「P임을 모르고 있다.」 기출이 쓰는 어미 그대로다.
+// 규칙에 안 맞는 문장은 재료에서 그냥 빠진다(질문형과 같은 방식).
+const MOCK_CRIT2_HEAD = ['라고 본다.', '고 본다.', '로 본다.', '라고 보았다.', '고 보았다.'];
+const MOCK_CRIT2_NOUN = [['있다','있음'], ['없다','없음'], ['않는다','않음'], ['아니다','아님'],
+                         ['이다','임'], ['한다','함'], ['된다','됨'], ['하였다','하였음']];
+function mockToCritique(body){
+  let t = (body || '').trim();
+  for(let i=0;i<MOCK_CRIT2_HEAD.length;i++){
+    const h = MOCK_CRIT2_HEAD[i];
+    if(t.length > h.length && t.slice(-h.length) === h){ t = t.slice(0, t.length - h.length); break; }
+  }
+  if(t.slice(-1) === '.') t = t.slice(0, -1);
+  if(!t) return null;
+  for(let i=0;i<MOCK_CRIT2_NOUN.length;i++){
+    const from = MOCK_CRIT2_NOUN[i][0], to = MOCK_CRIT2_NOUN[i][1];
+    if(t.length > from.length && t.slice(-from.length) === from){
+      return t.slice(0, t.length - from.length) + to + '을 모르고 있다.';
+    }
+  }
+  return null;
+}
+
+/* 두 사람의 판정이 한 문장에 다 있는 재료를 패턴별로 꺼내 온다.
+   pat('OX') 면 「갑은 긍정 · 을은 부정」. a 가 묶음의 첫 사람이 아니면 뒤집어 읽는다. */
+function mockDuoPat(a, b, rng){
+  const d = mockDuoOf(a, b);
+  if(!d) return null;
+  const flip = d.who[0] !== a;
+  const map = { OO:'OO', OX:'XO', XO:'OX', XX:'XX' };
+  return (k)=> shuffleSeeded(d[flip ? map[k] : k] || [], rng);
+}
+
+// 「갑, 을의 공통된 입장」 — 정답은 둘 다 긍정하는 문장, 오답은 한 사람이라도 부정하는 문장
+function buildSameQ(a, b, unit, rng, pairTopic, asBox){
+  const pool = mockPool();
+  const pat = mockDuoPat(a, b, rng);
+  if(!pat) return null;
+  const yes = pat('OO');
+  const no  = pat('OX').concat(pat('XO'), pat('XX'));
+  const lb = ['갑','을'];
+  const used = {};
+  const take = (list)=> mockPickDuoPlain(list, used, a, null);
+  const dress = (pick, isTrue)=> Object.assign({}, pick, {
+    notes: [a, b].map((n, k)=> mockAskLine(n, lb[k], pick.pat[n], pick.noteOf && pick.noteOf[n])),
+    verdict: mockFitVerdict('답은 ' + mockPatText([a, b], pick.pat, lb) + '.',
+                            '둘 다 긍정', isTrue, '찾는 것')
+  });
+  const A = pool.byName[a], B = pool.byName[b];
+  const psA = shuffleSeeded(A.ps, rng)[0], psB = shuffleSeeded(B.ps, rng)[0];
+  if(asBox){
+    const set = mockOptSet(rng);
+    const items = [];
+    for(let i=0;i<4;i++){
+      const isTrue = set.idx.indexOf(i) >= 0;
+      const pick = take(isTrue ? yes : no);
+      if(!pick) return null;
+      items.push(Object.assign({}, dress(pick, isTrue), { mark:MOCK_BOX_MARK[i], ok:isTrue }));
+    }
+    return { type:'samebox', a:a, b:b, unit:unit, pairTopic:pairTopic || null,
+             psA:psA, psB:psB, items:items, opts:set.opts, ans:set.ans };
+  }
+  const ansItem = take(yes);
+  if(!ansItem) return null;
+  const dist = [];
+  for(let i=0;i<4;i++){
+    const d = take(no);
+    if(!d) return null;
+    dist.push(dress(d, false));
+  }
+  const choices = shuffleSeeded(dist.concat([dress(ansItem, true)]), rng);
+  return { type:'same', a:a, b:b, unit:unit, pairTopic:pairTopic || null,
+           psA:psA, psB:psB, choices:choices,
+           ans:choices.findIndex(c=> c.id === ansItem.id) };
+}
+
+/* 1:1 비판 — 「갑의 입장에서 을에게 제기할 수 있는 비판으로 가장 적절한 것은?」
+   정답은 비판하는 쪽이 긍정하고 비판받는 쪽이 부정하는 문장이다.
+   오답 셋 갈래 — 둘 다 긍정(상대도 안다) · 둘 다 부정(자기도 모른다) · 거꾸로(상대가 할 비판). */
+function buildCrit2Q(a, b, unit, rng, pairTopic){
+  const pool = mockPool();
+  const pat = mockDuoPat(a, b, rng);
+  if(!pat) return null;
+  const fromB = rng() < 0.5;                 // 을이 갑에게 제기하는 꼴도 쓴다
+  const me = fromB ? b : a, you = fromB ? a : b;
+  const good = fromB ? pat('XO') : pat('OX');
+  const back = fromB ? pat('OX') : pat('XO');
+  const used = {};
+  const take = (list)=> mockPickDuoPlain(list, used, me, mockToCritique);
+  const why = (pick, kind)=>{
+    const noteOf = pick.noteOf || {};
+    const line = (n)=> mockAskLine(n, n === a ? '갑' : '을', pick.pat[n], noteOf[n]);
+    const notes = [line(a), line(b)];
+    let tail;
+    if(kind === 'ok')      tail = mockJo(me, '은', '는') + ' 이 주장을 받아들이고 ' + mockJo(you, '은', '는') + ' 받아들이지 않으므로 제기할 수 있는 비판이다.';
+    else if(kind === 'both') tail = mockJo(you, '도', '도') + ' 이 주장을 받아들이므로 모르고 있다고 할 수 없다.';
+    else if(kind === 'none') tail = mockJo(me, '자신도', '자신도') + ' 이 주장을 받아들이지 않으므로 비판의 근거가 되지 못한다.';
+    else                     tail = '방향이 거꾸로다 — ' + mockJo(you, '이', '가') + ' ' + mockJo(me, '에게', '에게') + ' 제기할 비판이다.';
+    return Object.assign({}, pick, { notes:notes, verdict:tail, critKind:kind });
+  };
+  const ansItem = take(good);
+  if(!ansItem) return null;
+  const dist = [];
+  const kinds = ['both', 'none', 'rev', 'both'];
+  const srcOf = { both:pat('OO'), none:pat('XX'), rev:back };
+  for(let i=0;i<4;i++){
+    let pick = null, kind = null;
+    const order = [kinds[i], 'both', 'none', 'rev'];
+    for(let k=0;k<order.length && !pick;k++){
+      kind = order[k];
+      pick = take(srcOf[kind]);
+    }
+    if(!pick) return null;
+    dist.push(why(pick, kind));
+  }
+  const choices = shuffleSeeded(dist.concat([why(ansItem, 'ok')]), rng);
+  const A = pool.byName[a], B = pool.byName[b];
+  return { type:'crit2', a:a, b:b, unit:unit, pairTopic:pairTopic || null, fromB:fromB,
+           psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
+           choices:choices, ans:choices.findIndex(c=> c.id === ansItem.id && c.critKind === 'ok') };
+}
+
+/* ---------- 1인 보기형 · 1인 질문형 보기 ----------
+   「다음 사상가의 입장만을 <보기>에서 있는 대로 고른 것은?」
+   「다음 사상가가 부정의 대답을 할 질문만을 <보기>에서 있는 대로 고른 것은?」
+   한 사람의 O/X 선지 넷을 ㄱ~ㄹ에 놓는다. 짝이 필요 없으므로 혼자서도 재료가 되는
+   사상가면 누구나 낼 수 있다 — 기출에 가장 흔한 보기형이다(6회차 120문항에 여덟). */
+function buildSoloBoxQ(n, rng, asQ){
+  const b = mockPool().byName[n];
+  if(!b) return null;
+  const set = mockOptSet(rng);
+  const neg = asQ ? (rng() < 0.5) : false;        // 질문형이면 「부정의 대답」 꼴도 쓴다
+  const yes = shuffleSeeded(neg ? b.X : b.O, rng);   // 정답 보기에 들어갈 쪽
+  const no  = shuffleSeeded(neg ? b.O : b.X, rng);   // 오답 보기에 들어갈 쪽
+  const used = {}, seen = {};
+  const take = (list)=>{
+    if(asQ) return mockPickQ(list, used);
+    for(let i=0;i<list.length;i++){
+      const it = list[i], body = mockPlainBody(it);
+      if(used[it.body] || seen[body]) continue;
+      used[it.body] = 1; seen[body] = 1;
+      return Object.assign({}, it, { body:body });
+    }
+    return null;
+  };
+  const items = [];
+  for(let i=0;i<4;i++){
+    const isTrue = set.idx.indexOf(i) >= 0;
+    const pick = take(isTrue ? yes : no);
+    if(!pick) return null;
+    let it = Object.assign({}, pick, { mark:MOCK_BOX_MARK[i], ok:isTrue });
+    if(asQ){
+      const yn = (neg === isTrue) ? '아니요' : '예';
+      const want = neg ? '「아니요」라고 답할 질문' : '「예」라고 답할 질문';
+      it.notes = [mockAskLine(n, null, yn === '예' ? 'O' : 'X', it.note)];
+      it.verdict = mockFitVerdict(mockJo(n, '은', '는') + ' 이 질문에 「' + yn + '」라고 답한다.',
+                                  want, isTrue, '찾는 것');
+    }
+    items.push(it);
+  }
+  return { type: asQ ? 'qsolobox' : 'solobox', name:n, neg:neg,
+           ps:shuffleSeeded(b.ps, rng)[0], items:items, opts:set.opts, ans:set.ans };
+}
+
+/* ---------- 점수 환산법 ----------
+   「제시문의 사상가에 대한 옳은 설명을 〈점수 환산법〉에 따라 계산한 최종 점수는?」
+   문장 다섯에 O/X 가 이미 표시되어 있고, 옳게 표시된 자리마다 1점이다.
+   선택지가 1~5점이므로 맞게 찍힌 개수가 1~5가 되도록 표시를 섞는다(0점은 선택지에 없다). */
+function buildScoreQ(n, rng){
+  const b = mockPool().byName[n];
+  if(!b) return null;
+  if(b.O.length < 2 || b.X.length < 2) return null;
+  const O = shuffleSeeded(b.O, rng), X = shuffleSeeded(b.X, rng);
+  const nO = 2 + Math.floor(rng() * 2);           // 옳은 설명 2~3개
+  const seen = {};
+  const pickRows = (list, ok, cnt)=>{
+    const out = [];
+    for(let i=0;i<list.length && out.length<cnt;i++){
+      const body = mockPlainBody(list[i]);
+      if(seen[body]) continue;
+      seen[body] = 1;
+      out.push(Object.assign({}, list[i], { body:body, ok:ok }));
+    }
+    return out;
+  };
+  const rows = shuffleSeeded(pickRows(O, true, nO).concat(pickRows(X, false, 5 - nO)), rng);
+  if(rows.length < 5) return null;
+  const score = 1 + Math.floor(rng() * 5);        // 최종 점수
+  const right = shuffleSeeded(rows.map((r, i)=> i), rng).slice(0, score);
+  rows.forEach((r, i)=>{
+    r.mark = String(i + 1);
+    r.marked = (right.indexOf(i) >= 0) ? r.ok : !r.ok;   // true = O칸에 체크
+  });
+  const got = rows.filter(r=> r.marked === r.ok).length;
+  if(got !== score) return null;
+  return { type:'score', name:n, ps:shuffleSeeded(b.ps, rng)[0], items:rows,
+           choices:[1,2,3,4,5].map(v=>({ body:v + '점' })), ans:score - 1 };
+}
+
+/* ---------- 서술형 평가 ----------
+   「그림은 서술형 평가 문제와 학생 답안이다. 학생 답안의 ㉠~㉤ 중 옳지 않은 것은?」
+   답안은 「갑은 ㉠·㉡, 을은 ㉢·㉣, 한편 갑과 을은 모두 ㉤」 꼴이고 다섯 가운데 하나만 틀리다.
+   ㉤ 자리는 「갑과 을은 모두」 선지라 그 짝에 공통 선지가 있어야 만들 수 있다. */
+const MOCK_ESSAY_MARK = ['㉠','㉡','㉢','㉣','㉤'];
+function buildEssayQ(a, b, unit, rng, pairTopic){
+  const pool = mockPool();
+  const A = pool.byName[a], B = pool.byName[b];
+  if(!A || !B) return null;
+  const pr = pool.pairs[mockPairKey(a, b)] || { O:[], X:[] };
+  if(!pr.O.length) return null;                   // ㉤ 자리에 쓸 공통 선지가 없으면 못 만든다
+  // 틀린 자리는 그 자리에 쓸 X 선지가 있는 곳에서만 고른다
+  const canBad = [A.X.length >= 1, A.X.length >= 1, B.X.length >= 1, B.X.length >= 1, pr.X.length >= 1]
+    .map((v, i)=> v ? i : -1).filter(i=> i >= 0);
+  if(!canBad.length) return null;
+  const bad = canBad[Math.floor(rng() * canBad.length)];
+  const slots = [{ who:a, lb:'갑' }, { who:a, lb:'갑' },
+                 { who:b, lb:'을' }, { who:b, lb:'을' },
+                 { who:null, lb:'갑과 을' }];
+  const lists = {};
+  lists[a + 'O'] = shuffleSeeded(A.O, rng); lists[a + 'X'] = shuffleSeeded(A.X, rng);
+  lists[b + 'O'] = shuffleSeeded(B.O, rng); lists[b + 'X'] = shuffleSeeded(B.X, rng);
+  lists['bothO'] = shuffleSeeded(pr.O, rng); lists['bothX'] = shuffleSeeded(pr.X, rng);
+  const cnt = {}, seen = {};
+  const take = (key)=>{
+    const list = lists[key] || [];
+    let i = cnt[key] || 0;
+    while(list[i] && seen[mockPlainBody(list[i])]) i++;
+    cnt[key] = i + 1;
+    const it = list[i];
+    if(!it) return null;
+    seen[mockPlainBody(it)] = 1;
+    return Object.assign({}, it, { body:mockPlainBody(it) });
+  };
+  const items = [];
+  for(let i=0;i<5;i++){
+    const s = slots[i], ok = (i !== bad);
+    const pick = take(s.who ? (s.who + (ok ? 'O' : 'X')) : ('both' + (ok ? 'O' : 'X')));
+    if(!pick) return null;
+    items.push(Object.assign({}, pick, { mark:MOCK_ESSAY_MARK[i], label:s.lb, ok:ok }));
+  }
+  return { type:'essay', a:a, b:b, unit:unit, pairTopic:pairTopic || null,
+           psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
+           items:items, choices:items.map(it=>({ body:it.mark })), ans:bad };
 }
 
 /* ---------- 3중 순서도 ----------
@@ -2326,8 +2631,10 @@ function buildTrioQ(a, b, c, unit, rng, pairTopic){
    이미 쓴 선지·제시문은 임시 풀에서 빼서 건네 같은 문장이 두 번 나오지 않게 한다.
    3중 벤·비판은 쓰지 않는다. 같은 날·같은 세트 번호면 같은 문제(씨앗은 mockSeedStr).
    =================================================================== */
-const MOCK_MIX_PLAIN = { right:0.26, wrong:0.18, pair:0.22, box:0.17, venn:0.06, algo:0.05, trio:0.06,
-                         qsolo:0.06, qpair:0.05, qbox:0.04, check:0.05, trioAlgo:0.05 };
+const MOCK_MIX_PLAIN = { right:0.20, wrong:0.14, pair:0.18, box:0.13, venn:0.06, algo:0.05, trio:0.06,
+                         qsolo:0.05, qpair:0.04, qbox:0.04, check:0.05, trioAlgo:0.05,
+                         solobox:0.09, qsolobox:0.04, score:0.05, essay:0.04,
+                         same:0.06, samebox:0.05, crit2:0.06 };
 
 // 이미 쓴 id(선지·제시문)를 뺀 임시 풀 — 빌더가 mockPool() 로 읽으므로 그 자리에 잠깐 끼운다
 function mockFilteredPool(names, ex){
@@ -2391,6 +2698,13 @@ function mockBuildOne(type, names, unit, topic, rng, ex, opt){
     if(type === 'qpair') return buildQPairQ(names[0], names[1], unit, rng, topic);
     if(type === 'qbox')  return buildQBoxQ(names[0], names[1], unit, rng, topic);
     if(type === 'trioAlgo') return buildTrioAlgoQ(names[0], names[1], names[2], unit, rng, topic);
+    if(type === 'solobox')  return buildSoloBoxQ(names[0], rng, false);
+    if(type === 'qsolobox') return buildSoloBoxQ(names[0], rng, true);
+    if(type === 'score')    return buildScoreQ(names[0], rng);
+    if(type === 'essay')    return buildEssayQ(names[0], names[1], unit, rng, topic);
+    if(type === 'same')     return buildSameQ(names[0], names[1], unit, rng, topic, false);
+    if(type === 'samebox')  return buildSameQ(names[0], names[1], unit, rng, topic, true);
+    if(type === 'crit2')    return buildCrit2Q(names[0], names[1], unit, rng, topic);
     return null;
   }); } finally { MOCK_EX_IDS = saveEx; }
 }
@@ -2400,7 +2714,9 @@ function mockTypeOrder(rng, types){
               .sort((x,y)=> y.k - x.k).map(x=> x.t);
 }
 const MOCK_ALL_TYPES = ['right','wrong','pair','box','venn','algo','trio',
-                        'qsolo','qpair','qbox','check','trioAlgo'];
+                        'qsolo','qpair','qbox','check','trioAlgo',
+                        'solobox','qsolobox','score','essay',
+                        'same','samebox','crit2'];
 
 // 「A와 B는 모두」 선지(틀린 것)가 하나라도 있는 짝인가 — 정형화 ⑤번 비교 선지의 재료
 function mockPairHasBoth(a, b){
@@ -2446,12 +2762,14 @@ function mockGenQ(n, rng, c){
       .filter(m=> c.mate ? m === c.mate : mateOk(m));
   };
   const tryType = type=>{
-    if(type === 'right' || type === 'wrong' || type === 'qsolo' || type === 'check'){
+    if(type === 'right' || type === 'wrong' || type === 'qsolo' || type === 'check'
+       || type === 'solobox' || type === 'qsolobox' || type === 'score'){
       if(c.mate) return null;
       const q = mockBuildOne(type, [n], unit, null, rng, ex);
       return q ? { q:q, names:[n] } : null;
     }
-    if(type === 'qpair' || type === 'qbox'){
+    if(type === 'qpair' || type === 'qbox' || type === 'same'
+       || type === 'samebox' || type === 'crit2'){
       const mates = shuffleSeeded(duoMates(), rng);
       for(let i=0;i<mates.length && i<6;i++){
         const q = mockBuildOne(type, [n, mates[i]], unit, topicOf(mates[i]), rng, ex);
@@ -2477,7 +2795,7 @@ function mockGenQ(n, rng, c){
       }
       return null;
     }
-    if(type === 'pair' || type === 'box'){
+    if(type === 'pair' || type === 'box' || type === 'essay'){
       const fifth = (type === 'pair' && c.fifth) ? { fifth:true } : null;
       // 정형화의 ⑤ 비교 선지는 「A와 B는 모두」 선지가 있는 짝에서만 만들 수 있다 — 그런 짝을 앞에 세운다
       let mates = c.mate ? [c.mate] : shuffleSeeded(wide, rng);
@@ -2916,7 +3234,13 @@ function toggleMockGuess(i){
      찍은 문항      → 그 문항의 선지(보기) 전부 — 맞혔어도
      고르지 않은 문항 → 찍은 것과 같이 본다
 */
-const MOCK_BOX_TYPES = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1, check:1 };
+/* 별표를 모을 때 선지를 어디서 읽는가.
+   BOX   — ㄱ~ㄹ 보기에서 조합을 고르는 유형. 틀린 조합과 정답 조합의 차이만 별표한다.
+   ITEM  — 선지가 보기 조합이 아니라 문장 묶음인 유형(체크표·점수 환산·서술형).
+           어느 선지를 골랐는지로는 어느 문장이 약한지 알 수 없으므로 문장을 다 별표한다. */
+const MOCK_BOX_TYPES = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1,
+                         solobox:1, qsolobox:1, samebox:1 };
+const MOCK_ITEM_TYPES = { check:1, score:1, essay:1 };
 function mockStarIds(set, run){
   const ids = [];
   const add = id => { if(id && ids.indexOf(id) < 0) ids.push(id); };
@@ -2925,11 +3249,13 @@ function mockStarIds(set, run){
     const blank = (picked === null);
     const guessed = !!(run.guess && run.guess[i]) || blank;
     const boxType = !!MOCK_BOX_TYPES[q.type];
+    const itemType = !!MOCK_ITEM_TYPES[q.type];
     if(guessed){
-      (boxType ? q.items : q.choices).forEach(c=> add(c.id));
+      ((boxType || itemType) ? q.items : q.choices).forEach(c=> add(c.id));
       return;
     }
     if(picked === q.ans) return;
+    if(itemType){ q.items.forEach(it=> add(it.id)); return; }
     if(boxType){
       const mine = q.opts[picked], right = q.opts[q.ans];
       q.items.forEach((it, k)=>{
