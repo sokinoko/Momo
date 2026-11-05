@@ -140,7 +140,12 @@ def main():
     counts = []
     for name, fn in DATA_FILES:
         obj = json.loads(read(fn))
-        counts.append('%s %d' % (fn, len(obj)))
+        # off 가 붙은 것은 아직 풀지 않은 회차다 — 저장소에는 두되 앱에는 넣지 않는다.
+        # 다 풀고 나면 그 회차의 off 만 지우면 바로 나온다.
+        off = sum(1 for x in obj if isinstance(x, dict) and x.get('off'))
+        if off:
+            obj = [x for x in obj if not (isinstance(x, dict) and x.get('off'))]
+        counts.append('%s %d%s' % (fn, len(obj), (' (+꺼둠 %d)' % off) if off else ''))
         data_lines.append('const %s = %s;' % (name, js_safe(json.dumps(obj, ensure_ascii=False))))
     parts.append('<script>\n' + '\n'.join(data_lines) + '\n</script>\n')
 
