@@ -22,6 +22,10 @@ for t in tests/test_*.js; do node "$t" | tail -1; done
 변경 후에는 **반드시 테스트와 빌드를 둘 다 통과**시키고 푸시한다.
 화면을 바꿨다면 가능하면 Playwright로 390×844 스크린샷을 찍어 확인한다.
 
+아직 풀지 않은 회차는 선지·제시문에 `off`를 달아 둔다 — 저장소에는 두되 `build.py`가
+앱에서 빼고 카운트에 「(+꺼둠 N)」으로 띄운다. 다 풀면 그 회차의 `off`만 지우면 바로 나온다.
+`ox_add`·`ps_add`의 `off=True`로 넣는다. 테스트도 `off`를 빼고 보되 `test_data.js`만 포함해 본다.
+
 ## 배포
 `main`에 들어가면 GitHub Actions가 테스트 → 빌드 → GitHub Pages 배포를 한다.
 빌드 결과물(html)은 저장소에 넣지 않는다. 작업은 브랜치에서 하고 PR로 올린다.
