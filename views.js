@@ -1654,6 +1654,10 @@ function renderMockReview(q, i, run){
       </div>
       <div class="mock-rv-line ok"><span class="mk">${MOCK_MARK[q.ans]}</span>
         <div><div class="lb">정답</div><div>${MOCK_CHECK_STU[q.ans]} — ${q.items.map((it,r)=> it.ok ? (r+1) : null).filter(x=>x!==null).join(', ')}번에만 체크</div></div></div>
+      ${(q.why || []).length ? `<div class="mock-boxes" style="margin-top:9px;">
+        <div class="mock-boxes-t">학 생 별 로</div>
+        ${q.why.map((t,i)=>`<div class="mock-box-row ${i===q.ans?'t':'f'}"><span class="tx">${escHtml(t)}</span></div>`).join('')}
+      </div>` : ''}
       ${(!blank && !ok) ? `<div class="mock-rv-line no"><span class="mk">${MOCK_MARK[picked]}</span>
         <div><div class="lb">OMR에 마킹한 것</div><div>${MOCK_CHECK_STU[picked]}</div></div></div>` : ''}`;
   } else if(boxType){
@@ -1664,7 +1668,7 @@ function renderMockReview(q, i, run){
           <span class="mk">${it.mark}.</span>
           <span class="tx">${(it.zone || it.label) ? `<b class="mock-lb">${it.zone?it.zone:it.label} :</b> ` : ''}${escHtml(it.body)}
             <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
-            ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${(it.note && !(it.notes||[]).length)?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
             ${(it.notes||[]).map(t=>`<div class="mock-rv-note">${escHtml(t)}</div>`).join('')}
             ${mockSrcNote(it)}
             ${mockSrcLine(it)}
@@ -1690,10 +1694,14 @@ function renderMockReview(q, i, run){
         if(open){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;
           // 비판 문항의 해설은 그 자체로 완결된 설명이라 앞머리를 붙이지 않는다
-          const head = (q.type === 'critique') ? '' : ((statementTrue ? '함께 알아둘 것' : '왜 틀렸나') + ' — ');
-          if(c.note) notes += `<div class="mock-rv-note">${head}${escHtml(c.note)}</div>`;
+          // 비판·질문형은 해설이 그 자체로 완결되거나 결론을 verdict 가 따로 내므로 앞머리를 안 붙인다
+          const bare = { critique:1, qsolo:1, qpair:1 };
+          const head = bare[q.type] ? '' : ((statementTrue ? '함께 알아둘 것' : '왜 틀렸나') + ' — ');
+          if(c.note && !(c.notes || []).length) notes += `<div class="mock-rv-note">${head}${escHtml(c.note)}</div>`;
+          (c.notes || []).forEach(t=>{ notes += `<div class="mock-rv-note">${escHtml(t)}</div>`; });
           if(!statementTrue && c.fix) notes += `<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(c.fix)}</div>`;
           notes += mockSrcNote(c);
+          if(c.verdict) notes += `<div class="mock-rv-verdict ${isAns?'t':'f'}">${escHtml(c.verdict)}</div>`;
         }
         return `<div class="mock-rv-row ${isAns?'ans':''} ${isMine && !isAns?'mine':''}">
           <span class="mk">${MOCK_MARK[ci]}</span>

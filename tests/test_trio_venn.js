@@ -8,10 +8,12 @@
 //
 // 재료는 cmp_items.json 에서 set 이 「삼중-자체」인 단독 선지다.
 // 같은 문장을 세 사람에게 각각 O/X 로 매겨 두면 어느 영역인지 저절로 정해진다.
+/* 아직 풀지 않은 회차(off)는 build.py 가 앱에 넣지 않으므로 테스트도 똑같이 뺀다.
+   데이터 자체는 test_data.js 가 off 까지 포함해 따로 본다. */
 const fs = require('fs');
 const APP = __dirname + '/..';
-const PASSAGES = JSON.parse(fs.readFileSync(APP + '/passages.json', 'utf8'));
-const CMP = JSON.parse(fs.readFileSync(APP + '/cmp_items.json', 'utf8'));
+const PASSAGES = JSON.parse(fs.readFileSync(APP + '/passages.json', 'utf8')).filter(x=>!x.off);
+const CMP = JSON.parse(fs.readFileSync(APP + '/cmp_items.json', 'utf8')).filter(x=>!x.off);
 /* 이름 목록은 app.js 의 mockNameList 와 같아야 한다 — 제시문 이름뿐 아니라
    별칭(양명)과 범주 이름·구성원(공화주의·위정척사·온건개화파…)까지 넣는다.
    제시문 이름만 읽으면 「위정척사는 ~」 같은 삼중 선지가 통째로 파싱되지 않는다. */
@@ -52,7 +54,7 @@ function split(text){
 let fail = 0;
 // 출제기(mockTrioSets)와 같은 방식으로 판정을 모은다.
 //   단독 「A는 P」 · 「A와 B는 모두 P」 O · 「A는 B와 달리 P」 O
-const OX = JSON.parse(fs.readFileSync(APP + '/ox_items.json', 'utf8'));
+const OX = JSON.parse(fs.readFileSync(APP + '/ox_items.json', 'utf8')).filter(x=>!x.off);
 const byBody = new Map();
 const put = (body, name, ans)=>{
   if(!byBody.has(body)) byBody.set(body, new Map());

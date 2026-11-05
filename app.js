@@ -1635,6 +1635,31 @@ function mockToQuestion(body){
   }
   return null;
 }
+/* ---------- 질문형·순서도 해설 ----------
+   「이 질문에 누가 예라고 하고 누가 아니요라고 하는가」를 사람마다 적고,
+   마지막에 「그래서 이 자리에 맞다/틀리다」를 한 줄로 낸다. 벤다이어그램과 같은 꼴이다.
+   3중 순서도처럼 세 사람을 다 봐야 하는 자리는 셋을 다 적어 준다. */
+function mockYN(v){ return v === 'O' ? '예' : (v === 'X' ? '아니요' : null); }
+// 사람마다 한 줄 — 「갑(로크) 「예」 — 근거」
+function mockAskLine(name, label, ans, note){
+  const yn = mockYN(ans);
+  const head = (label ? label + '(' + name + ')' : name) + ' 「' + (yn || '?') + '」';
+  return head + (note ? ' — ' + note : '.');
+}
+/* 결론 한 줄 — 「읽은 것 · 이 자리는 …여야 하므로 제자리다/자리가 틀렸다」.
+   그림의 자리를 묻는 유형과 선지를 고르는 질문형은 맺음말이 다르다. */
+function mockFitVerdict(got, want, ok, where){
+  const w = where || '이 자리';
+  const seat = w !== '찾는 것';
+  return got + ' ' + mockJo(w, '은', '는') + ' ' + want + (seat ? '여야 하므로 ' : '이므로 ')
+       + (seat ? (ok ? '제자리다.' : '자리가 틀렸다.') : (ok ? '이 질문이 답이다.' : '답이 아니다.'));
+}
+// 사람·판정을 「갑 예 · 을 아니요」로 줄여 쓴다
+function mockPatText(who, ans, labels){
+  return who.map((n, i)=> (labels ? labels[i] : n) + ' ' + (mockYN(ans[n]) || '?')).join(' · ');
+}
+const MOCK_TRIO_LB3 = ['갑','을','병'];
+
 function mockPickQ(list, used){
   for(let i=0;i<list.length;i++){
     const it = list[i];
@@ -1673,7 +1698,22 @@ function buildAlgoQ(a, b, unit, rng, pairTopic){
     else src = isTrue ? BO : BX;
     const pick = mockPickQ(src, used);
     if(!pick) return null;
-    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue }));
+    /* 자리마다 조건이 다르다 — A는 갑 예·을 아니요, B는 갑 예, C는 을 예.
+       무엇을 읽었고 그래서 이 자리에 맞는지를 한 줄로 낸다. */
+    const WANT = { A:'「갑 예 · 을 아니요」', B:'「갑 예」', C:'「을 예」' };
+    let got, lines;
+    if(z === 'A'){
+      // A 재료는 「한쪽은 예, 다른 쪽은 아니요」 선지라 두 사람 판정이 다 들어 있다
+      const first = isTrue ? a : b, second = isTrue ? b : a;
+      got = '답은 갑 ' + (isTrue ? '예' : '아니요') + ' · 을 ' + (isTrue ? '아니요' : '예') + '.';
+      lines = [mockAskLine(first, null, 'O', pick.note), mockAskLine(second, null, 'X', '')];
+    } else {
+      const who = (z === 'B') ? a : b, label = (z === 'B') ? '갑' : '을';
+      got = '답은 ' + label + ' ' + (isTrue ? '예' : '아니요') + '.';
+      lines = [mockAskLine(who, label, isTrue ? 'O' : 'X', pick.note)];
+    }
+    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue,
+      notes:lines, verdict:mockFitVerdict(got, WANT[z], isTrue, z + ' 자리') }));
   }
 
   const psA = shuffleSeeded(A.ps, rng)[0];
@@ -1707,16 +1747,26 @@ function buildQSoloQ(n, rng){
     dist.push(d);
   }
   const ps = shuffleSeeded(b.ps, rng)[0];
-  const choices = shuffleSeeded(dist.concat([ansItem]), rng);
-  return { type:'qsolo', name:n, neg:neg, ps:ps, choices:choices, ans:choices.indexOf(ansItem) };
+  const want = neg ? '「아니요」라고 답할 질문' : '「예」라고 답할 질문';
+  const mark = (it, isAns)=>{
+    const yn = (neg === isAns) ? '아니요' : '예';   // 정답이면 찾는 쪽, 아니면 그 반대
+    return Object.assign({}, it, {
+      verdict: mockFitVerdict(mockJo(n, '은', '는') + ' 이 질문에 「' + yn + '」라고 답한다.',
+                              want, isAns, '찾는 것')
+    });
+  };
+  const choices = shuffleSeeded(dist.map(d=> mark(d, false)).concat([mark(ansItem, true)]), rng);
+  return { type:'qsolo', name:n, neg:neg, ps:ps, choices:choices,
+           ans:choices.map(c=> c.verdict).indexOf(mark(ansItem, true).verdict) };
 }
 
 // 판정 묶음 하나를 그 사람 쪽에서 본 선지로 만든다 — 해설·출처가 원래 선지에서 따라온다
 let MOCK_EX_IDS = null;
 function mockExcluded(id){ return !!(MOCK_EX_IDS && id && MOCK_EX_IDS[id]); }
 function mockDuoItem(p, who, qbody){
+  // note 는 그 사람 것, noteOf 는 사람마다의 근거 전부 — 해설이 둘·셋을 다 짚어야 한다
   return { body:qbody, id:p.id[who] || '', note:p.note[who] || '',
-           plainBody:p.body, pat:p.ans };
+           plainBody:p.body, pat:p.ans, noteOf:p.note, idOf:p.id };
 }
 function mockPickDuo(list, used, who){
   for(let i=0;i<list.length;i++){
@@ -1750,10 +1800,16 @@ function buildQPairQ(a, b, unit, rng, pairTopic){
     dist.push(w);
   }
   const A = pool.byName[a], B = pool.byName[b];
-  const choices = shuffleSeeded(dist.concat([ansItem]), rng);
+  const lb = ['갑','을'];
+  const deco = (it, isAns)=> Object.assign({}, it, {
+    notes: [a, b].map((n, i)=> mockAskLine(n, lb[i], it.pat[n], it.noteOf && it.noteOf[n])),
+    verdict: mockFitVerdict('답은 ' + mockPatText([a, b], it.pat, lb) + '.',
+                            '「갑 예 · 을 아니요」', isAns, '찾는 것')
+  });
+  const choices = shuffleSeeded(dist.map(d=> deco(d, false)).concat([deco(ansItem, true)]), rng);
   return { type:'qpair', a:a, b:b, unit:unit, pairTopic:pairTopic||null,
            psA:shuffleSeeded(A.ps, rng)[0], psB:shuffleSeeded(B.ps, rng)[0],
-           choices:choices, ans:choices.indexOf(ansItem) };
+           choices:choices, ans:choices.map(c=> c.body).indexOf(ansItem.body) };
 }
 
 function buildQBoxQ(a, b, unit, rng, pairTopic){
@@ -1774,7 +1830,13 @@ function buildQBoxQ(a, b, unit, rng, pairTopic){
     const isTrue = set.idx.indexOf(i) >= 0;
     const pick = mockPickDuo(isTrue ? yes : no, used, a);
     if(!pick) return null;
-    items.push(Object.assign({}, pick, { mark:MOCK_BOX_MARK[i], ok:isTrue }));
+    const lb = ['갑','을'];
+    items.push(Object.assign({}, pick, {
+      mark:MOCK_BOX_MARK[i], ok:isTrue,
+      notes: [a, b].map((n, k)=> mockAskLine(n, lb[k], pick.pat[n], pick.noteOf && pick.noteOf[n])),
+      verdict: mockFitVerdict('답은 ' + mockPatText([a, b], pick.pat, lb) + '.',
+                              '둘 다 「' + (neg ? '아니요' : '예') + '」', isTrue, '찾는 것')
+    }));
   }
   const A = pool.byName[a], B = pool.byName[b];
   return { type:'qbox', a:a, b:b, unit:unit, pairTopic:pairTopic||null, neg:neg,
@@ -1785,8 +1847,37 @@ function buildQBoxQ(a, b, unit, rng, pairTopic){
 /* ---------- 학생 체크표 ----------
    「다음을 주장한 사상가의 관점에만 모두 '✓'를 표시한 학생은?」
    문장 넷에 그 사람의 O/X 를 매겨 두면 정답 체크 패턴이 저절로 정해진다.
-   학생 다섯 가운데 넷은 그 패턴과 한 군데 이상 다른 패턴을 받는다. */
+
+   학생 다섯을 아무렇게나 고르면 첫 줄만 보고 답이 나와 아래 세 줄이 장식이 된다.
+   이 문항은 위에서 아래로 한 줄씩 맞춰 보며 후보를 지워 나가는 것이므로,
+   **한 줄에 한 명씩** 떨어져 마지막 줄까지 봐야 하나가 남도록 고른다.
+     첫 번째로 어긋나는 줄이 4행인 학생 · 3행인 학생 · 2행인 학생 · 1행인 학생을 하나씩.
+     그러면 남는 후보가 5 → 4 → 3 → 2 → 1 로 줄고, 4행을 보기 전까지 둘이 남는다.
+   어긋나는 줄 아래쪽은 같아도 되고 달라도 되므로 거기서 모양을 섞는다. */
 const MOCK_CHECK_STU = ['갑','을','병','정','무'];
+function mockCheckPats(truth, rng){
+  const key = p=> p.join('');
+  const flip = (idx)=> truth.map((v, i)=> idx.indexOf(i) >= 0 ? (v ? 0 : 1) : v);
+  const seen = {}; const out = [truth];
+  seen[key(truth)] = 1;
+  const push = (p)=>{ const k = key(p); if(seen[k]) return false; seen[k] = 1; out.push(p); return true; };
+  // 첫 어긋남이 아래쪽 줄인 학생부터 — 그래야 그 학생이 마지막까지 후보로 남는다
+  for(let first=truth.length-1; first>=0; first--){
+    const tail = [];
+    for(let j=first+1;j<truth.length;j++) if(rng() < 0.5) tail.push(j);
+    if(!push(flip([first].concat(tail)))) push(flip([first]));
+  }
+  if(out.length < 5){                                  // 같은 패턴이 겹쳤으면 남는 것으로 채운다
+    const all = [];
+    for(let m=0;m<16;m++) all.push([0,1,2,3].map(i=> (m >> i) & 1));
+    shuffleSeeded(all, rng).forEach(p=>{ if(out.length < 5) push(p); });
+  }
+  return out.length === 5 ? out : null;
+}
+// 위에서부터 k줄을 맞춰 봤을 때 남는 후보 수 — 테스트와 해설이 같은 셈을 쓴다
+function mockCheckLeft(pats, truth, k){
+  return pats.filter(p=>{ for(let i=0;i<k;i++) if(p[i] !== truth[i]) return false; return true; }).length;
+}
 function buildCheckQ(n, rng){
   const b = mockPool().byName[n];
   if(!b) return null;
@@ -1800,15 +1891,22 @@ function buildCheckQ(n, rng){
   rows.forEach((r, i)=>{ r.mark = String(i + 1); });
   const truth = rows.map(r=> r.ok ? 1 : 0);
   const key = p=> p.join('');
-  const all = [];
-  for(let m=0;m<16;m++) all.push([0,1,2,3].map(i=> (m >> i) & 1));
-  const others = shuffleSeeded(all.filter(p=> key(p) !== key(truth)), rng).slice(0, 4);
-  if(others.length < 4) return null;
-  const pats = shuffleSeeded(others.concat([truth]), rng);
+  const made = mockCheckPats(truth, rng);
+  if(!made) return null;
+  const pats = shuffleSeeded(made, rng);
   const ans = pats.map(key).indexOf(key(truth));
+  if(ans < 0) return null;
   const choices = pats.map((p, i)=> ({ body:MOCK_CHECK_STU[i] }));
+  // 학생마다 「어느 줄에서 처음 어긋나는가」 — 위에서 아래로 지워 나가는 순서 그대로 적는다
+  const why = pats.map((p, i)=>{
+    if(i === ans) return MOCK_CHECK_STU[i] + ' — 네 줄이 다 맞다.';
+    const bad = p.map((v, r)=> v !== truth[r]
+      ? ((r + 1) + '번은 ' + (truth[r] ? '체크해야 하는데 비웠다' : '비워야 하는데 체크했다')) : null).filter(Boolean);
+    const first = p.findIndex((v, r)=> v !== truth[r]);
+    return MOCK_CHECK_STU[i] + ' — ' + (first + 1) + '번에서 걸린다. ' + bad.join(', ') + '.';
+  });
   return { type:'check', name:n, ps:shuffleSeeded(b.ps, rng)[0],
-           items:rows, pats:pats, choices:choices, ans:ans };
+           items:rows, pats:pats, choices:choices, ans:ans, why:why };
 }
 
 /* ---------- 3중 순서도 ----------
@@ -1873,18 +1971,32 @@ function mockTrioAlgoWith(shape, who, pool, set, opt, rng, unit, pairTopic){
     const z = zones[i];
     const spec = shape.slots[z];
     let pick = null;
+    let seats, want;                                  // 이 자리가 보는 사람들과 요구 조건
     if(spec[0] === 'solo'){
       // 한 사람 자리는 그 사람의 선지에서 바로 뽑는다 — 판정 묶음을 거치지 않아 재료가 넓다
       const bn = pool.byName[who[spec[1]]];
       pick = mockPickQ(shuffleSeeded(isTrue ? bn.O : bn.X, rng), used);
-      if(pick) pick = Object.assign({}, pick, { who:who[spec[1]] });
+      if(pick) pick = Object.assign({}, pick, { who:who[spec[1]], pat:{ [who[spec[1]]]:(isTrue ? 'O' : 'X') } });
+      seats = [spec[1]];
+      want = '「' + MOCK_TRIO_LB3[spec[1]] + ' 예」';
     } else {
       const src = shuffleSeeded(set.list.filter(p=> mockTrioAlgoFit(p, spec, who) === isTrue), rng);
       // 해설·출처는 그 자리가 가리키는 첫 사람의 선지에서 끌어온다
       pick = mockPickDuo(src, used, who[spec[0] === 'duo' ? spec[1] : 0]);
+      seats = (spec[0] === 'trio') ? [0, 1, 2] : [spec[1], spec[2]];
+      const pat = (spec[0] === 'trio') ? spec[1] : spec[3];
+      want = '「' + seats.map((k, j)=> MOCK_TRIO_LB3[k] + ' ' + mockYN(pat[j])).join(' · ') + '」';
     }
     if(!pick) return null;
-    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue }));
+    /* 세 사람을 다 봐야 하는 자리가 있다. 누가 예라고 하고 누가 아니요라고 하는지
+       사람마다 근거와 함께 적고, 마지막에 이 자리의 조건과 맞는지를 낸다. */
+    const names = seats.map(k=> who[k]), labels = seats.map(k=> MOCK_TRIO_LB3[k]);
+    const noteOf = pick.noteOf || {};
+    const lines = names.map((nm, j)=> mockAskLine(nm, labels[j], pick.pat && pick.pat[nm],
+                                                  noteOf[nm] || (names.length === 1 ? pick.note : '')));
+    const got = '답은 ' + mockPatText(names, pick.pat || {}, labels) + '.';
+    items.push(Object.assign({}, pick, { zone:z, mark:MOCK_BOX_MARK[i], ok:isTrue,
+      notes:lines, verdict:mockFitVerdict(got, want, isTrue, z + ' 자리') }));
   }
   const ps = who.map(n=> shuffleSeeded(pool.byName[n].ps, rng)[0]);
   if(ps.some(x=> !x)) return null;

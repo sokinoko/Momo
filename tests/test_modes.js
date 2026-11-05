@@ -1,14 +1,16 @@
 /* 테마별 · 정형화 · 크기 고르기 · 범주/별칭 회귀 테스트
    node tests/test_modes.js */
+/* 아직 풀지 않은 회차(off)는 build.py 가 앱에 넣지 않으므로 테스트도 똑같이 뺀다.
+   데이터 자체는 test_data.js 가 off 까지 포함해 따로 본다. */
 const fs = require('fs');
 const path = require('path');
 const APP = path.join(__dirname, '..');
 
 global.DATA = JSON.parse(fs.readFileSync(path.join(__dirname,'..','topics_all.json'),'utf8'));
-global.PASSAGES = JSON.parse(fs.readFileSync(path.join(APP,'passages.json'),'utf8'));
-global.OX_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'ox_items.json'),'utf8'));
+global.PASSAGES = JSON.parse(fs.readFileSync(path.join(APP,'passages.json'),'utf8')).filter(x=>!x.off);
+global.OX_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'ox_items.json'),'utf8')).filter(x=>!x.off);
 // 자체 제작 비교 선지(모의고사 전용). 출제기가 이것도 읽으므로 테스트에서도 함께 건다
-global.CMP_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'cmp_items.json'),'utf8'));
+global.CMP_ITEMS = JSON.parse(fs.readFileSync(path.join(APP,'cmp_items.json'),'utf8')).filter(x=>!x.off);
 global.STATE = { quiz:{ setNo:0, run:null }, streak:{} };
 
 let TODAY = '2026-09-11';

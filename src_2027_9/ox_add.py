@@ -34,7 +34,7 @@ def known_topics():
     return ids
 
 
-def add(batch, dry=False):
+def add(batch, dry=False, off=False):
     ox = json.load(open(PATH, encoding='utf-8'))
     ok_topics = known_topics()
     ids = {i['id'] for i in ox}
@@ -61,6 +61,8 @@ def add(batch, dry=False):
             continue
         ids.add(rec['id'])
         have.add((t, rec['source']))
+        if off:
+            rec['off'] = 1   # 아직 풀지 않은 회차 — 저장소에는 두되 build.py 가 앱에 넣지 않는다
         added.append(rec)
 
     n_x = sum(1 for r in added if r['answer'] == 'X')

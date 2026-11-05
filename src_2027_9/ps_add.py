@@ -7,6 +7,7 @@
     from ps_add import add
     add([('ps-yihwang', '이황', 'yiiyi', [(출처, 본문, [단서...]), ...]), ...])
     항목에 네 번째 값을 주면 정답 화면에 괄호로 붙는다: (출처, 본문, [단서], '최제우')
+    off=True 로 넣으면 아직 풀지 않은 회차로 꺼 둔다(build.py 가 앱에서 뺀다).
 
 하는 일
   · 이름·aliases·topic 은 기존 항목에서 물려받는다
@@ -21,7 +22,7 @@ APP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PATH = os.path.join(APP, 'passages.json')
 
 
-def add(batch, dry=False):
+def add(batch, dry=False, off=False):
     ps = json.load(open(PATH, encoding='utf-8'))
     added, dup = [], []
 
@@ -53,6 +54,8 @@ def add(batch, dry=False):
                    'aliases': aliases, 'source': src, 'clues': clues}
             if by:
                 rec['by'] = by     # 정답 화면에 괄호로 붙는 출처 (예: 동학 (최제우))
+            if off:
+                rec['off'] = 1     # 아직 풀지 않은 회차 — 저장소에는 두되 build.py 가 앱에 넣지 않는다
             added.append(rec)
         print('%-8s %2d편%s' % (name, len(added) - n0, '' if same else '  (새 이름)'))
 
