@@ -849,7 +849,7 @@ function nextPs(){
    =================================================================== */
 
 const MOCK_MARK = ['①','②','③','④','⑤'];
-const MOCK_BOXY = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1 };
+const MOCK_BOXY = { box:1, venn:1, algo:1, trioVenn:1, qbox:1, trioAlgo:1, solobox:1, qsolobox:1, samebox:1 };
 const MOCK_TRIO_LB = ['갑','을','병'];
 
 function mockEraWord(era){
@@ -873,6 +873,12 @@ function mockWhoPhrase(names, figure){
   return groups.map(g=> word(g.e) + ' ' + (g.l.length === 2 ? g.l[0] + '과 ' + g.l[1] : g.l.join(', '))).join(', ');
 }
 
+/* 서술형 평가는 발문에 사람을 적지 않는다. 「근대 서양 사상가 갑, 을의 입장을 비교하여
+   서술하시오」가 그림 속 문제로 들어간다(기출이 그렇다). 발문과 같은 규칙을 쓰므로 여기 둔다. */
+function mockEssayTask(q){
+  return mockWhoPhrase([q.a, q.b], false) + '의 입장을 비교하여 서술하시오.';
+}
+
 function mockStemText(q){
   if(q.type === 'trioVenn'){
     return '(가)의 ' + mockWhoPhrase(q.who, true) + '의 입장을 (나) 그림으로 표현할 때, ' +
@@ -890,17 +896,52 @@ function mockStemText(q){
            'A~D에 들어갈 적절한 질문만을 <보기>에서 있는 대로 고른 것은?';
   }
   if(q.type === 'qbox'){
+    if(q.same) return mockWhoPhrase([q.a, q.b], false) +
+           ' 모두 공통의 대답을 할 질문만을 <보기>에서 있는 대로 고른 것은?';
     return mockWhoPhrase([q.a, q.b], false) + '이 모두 ' + (q.neg ? '부정' : '긍정') +
            '의 대답을 할 질문만을 <보기>에서 있는 대로 고른 것은?';
   }
   if(q.type === 'qpair'){
-    return mockWhoPhrase([q.a, q.b], false) +
-           ' 가운데 갑은 긍정, 을은 부정의 대답을 할 질문으로 가장 적절한 것은?';
+    return mockWhoPhrase([q.a, q.b], false) + ' 가운데 ' +
+           (q.rev ? '갑은 부정, 을은 긍정' : '갑은 긍정, 을은 부정') +
+           '의 대답을 할 질문으로 가장 적절한 것은?';
   }
   if(q.type === 'qsolo'){
     const e2 = mockEra(q.name);
     return '다음을 주장한 ' + (e2 === '사회' ? '사회' : e2) + ' 사상가가 ' +
            (q.neg ? '부정' : '긍정') + '의 대답을 할 질문으로 옳은 것은?';
+  }
+  if(q.type === 'same'){
+    if(q.ism) return '사회사상 (가), (나)의 공통된 입장으로 옳은 것은?';
+    return mockWhoPhrase([q.a, q.b], false) + '의 공통된 입장으로 옳은 것은?';
+  }
+  if(q.type === 'samebox'){
+    if(q.ism) return '사회사상 (가), (나)의 공통된 입장만을 <보기>에서 있는 대로 고른 것은?';
+    return mockWhoPhrase([q.a, q.b], false) + '의 공통된 입장만을 <보기>에서 있는 대로 고른 것은?';
+  }
+  if(q.type === 'crit2'){
+    return mockWhoPhrase([q.a, q.b], false) + ' 가운데 ' +
+           (q.fromB ? '갑에게 을이' : '갑이 을에게') +
+           ' 제기할 수 있는 비판으로 가장 적절한 것은?';
+  }
+  if(q.type === 'solobox'){
+    const e4 = mockEra(q.name);
+    if(mockIsIsm(q.name)) return '다음 사회사상의 입장만을 <보기>에서 있는 대로 고른 것은?';
+    return '다음을 주장한 ' + (e4 === '사회' ? '사회' : e4) +
+           ' 사상가의 입장만을 <보기>에서 있는 대로 고른 것은?';
+  }
+  if(q.type === 'qsolobox'){
+    const e5 = mockEra(q.name);
+    return '다음을 주장한 ' + (e5 === '사회' ? '사회' : e5) + ' 사상가가 ' +
+           (q.neg ? '부정' : '긍정') + '의 대답을 할 질문만을 <보기>에서 있는 대로 고른 것은?';
+  }
+  if(q.type === 'score'){
+    const e6 = mockEra(q.name);
+    return '제시문의 ' + (e6 === '사회' ? '사회' : e6) +
+           ' 사상가에 대한 옳은 설명을 <점수 환산법>에 따라 계산한 최종 점수는?';
+  }
+  if(q.type === 'essay'){
+    return '그림은 서술형 평가 문제와 학생 답안이다. 학생 답안의 ㉠~㉤ 중 옳지 않은 것은?';
   }
   if(q.type === 'check'){
     const e3 = mockEra(q.name);
@@ -965,7 +1006,8 @@ function mockPsBox(q, withSrc){
     </div>`;
   }
   if(q.type === 'venn' || q.type === 'box' || q.type === 'pair' || q.type === 'algo'
-     || q.type === 'qpair' || q.type === 'qbox'){
+     || q.type === 'qpair' || q.type === 'qbox' || q.type === 'essay'
+     || q.type === 'same' || q.type === 'samebox' || q.type === 'crit2'){
     return tag([[q.L1||'갑', q.psA], [q.L2||'을', q.psB]]) + `<div class="mock-ps mock-ps-pair">
       <div class="mock-ps-row"><span class="lb">${q.L1||'갑'}</span><span>${escHtml(q.psA.text)}</span></div>
       <div class="mock-ps-row"><span class="lb">${q.L2||'을'}</span><span>${escHtml(q.psB.text)}</span></div>
@@ -980,7 +1022,38 @@ function mockFigFor(q){
   if(q.type === 'critique') return mockCritiqueFig();
   if(q.type === 'trioAlgo') return mockTrioAlgoFig(q.shape);
   if(q.type === 'check') return mockCheckFig(q);
+  if(q.type === 'score') return mockScoreFig(q);
+  if(q.type === 'essay') return mockEssayFig(q);
   return '';
+}
+
+/* 점수 환산법 — 설명마다 O·X 한 칸에 체크가 이미 찍혀 있다.
+   옳게 찍힌 자리가 몇 개인지 세는 문항이라 정답은 점수(1~5)다. */
+function mockScoreFig(q){
+  return `<table class="mock-check mock-score">
+    <thead><tr><th class="h">설명</th><th>O</th><th>X</th></tr></thead>
+    <tbody>${q.items.map((it, r)=>`<tr>
+      <td class="st"><span class="n">${r+1}</span>${escHtml(it.body)}</td>
+      <td>${it.marked ? '✓' : ''}</td><td>${it.marked ? '' : '✓'}</td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr><td class="rule" colspan="3">&lt; 점 수 환 산 법 &gt;
+      ① 각 설명에 답이 옳게 표시되면 1점, 옳지 못하면 0점을 부여한다.
+      ② 환산된 점수의 합을 구한다.</td></tr></tfoot>
+  </table>`;
+}
+
+/* 서술형 평가 — 학생 답안을 ㉠~㉤ 로 끊어 보여 준다. 갑 둘 · 을 둘 · 공통 하나 */
+function mockEssayFig(q){
+  // 선지 본문은 「~라고 본다.」로 끝나므로 쉼표로 잇지 않고 문장을 이어 붙인다
+  const seg = (it)=> `<b class="mock-lb">${it.mark}</b> ${escHtml(it.body)}`;
+  return `<div class="mock-essay">
+    <div class="mock-essay-t">서 술 형 평 가</div>
+    <div class="mock-essay-q">◎ 문제 : ${escHtml(mockEssayTask(q))}</div>
+    <div class="mock-essay-a"><b>◎ 학생 답안</b><br>
+      갑, 을의 입장을 비교해 보면, 갑은 ${seg(q.items[0])} ${seg(q.items[1])}
+      이에 비해 을은 ${seg(q.items[2])} ${seg(q.items[3])}
+      한편 갑, 을은 모두 ${seg(q.items[4])}</div>
+  </div>`;
 }
 let MOCK_FIG_SEQ = 0;
 
@@ -1216,14 +1289,18 @@ function mockChoiceHtml(c){
 function mockQName(q){
   if(q.type === 'trio' || q.type === 'trioVenn' || q.type === 'critique' || q.type === 'trioAlgo') return q.who.join(' · ');
   if(q.type === 'pair' || q.type === 'box' || q.type === 'venn' || q.type === 'algo'
-     || q.type === 'qpair' || q.type === 'qbox') return q.a + ' · ' + q.b;
+     || q.type === 'qpair' || q.type === 'qbox' || q.type === 'essay'
+     || q.type === 'same' || q.type === 'samebox' || q.type === 'crit2') return q.a + ' · ' + q.b;
   return q.name;
 }
 const MOCK_TYPE_LABEL = { right:'옳은 것', wrong:'옳지 않은 것', pair:'갑·을 대조',
                           box:'보기 고르기', venn:'벤다이어그램', algo:'순서도', trio:'갑·을·병 대조',
                           trioVenn:'3중 벤다이어그램', critique:'서로에 대한 비판',
-                          qsolo:'대답할 질문', qpair:'갑 긍정·을 부정', qbox:'모두 같은 대답',
-                          check:'학생 체크표', trioAlgo:'3중 순서도' };
+                          qsolo:'대답할 질문', qpair:'갑·을 대답 가르기', qbox:'모두 같은 대답',
+                          check:'학생 체크표', trioAlgo:'3중 순서도',
+                          solobox:'1인 보기 고르기', qsolobox:'1인 질문 고르기',
+                          score:'점수 환산', essay:'서술형 평가',
+                          same:'공통된 입장', samebox:'공통된 입장 보기', crit2:'1:1 비판' };
 // 기출이 아니라 우리가 만든 선지라는 표시. 채점 해설에서 늘 보인다
 // 선지의 출처 이름. 문항에 src가 없으면 원본 선지(id)에서 찾는다
 function mockSrcOf(it){
@@ -1660,6 +1737,47 @@ function renderMockReview(q, i, run){
       </div>` : ''}
       ${(!blank && !ok) ? `<div class="mock-rv-line no"><span class="mk">${MOCK_MARK[picked]}</span>
         <div><div class="lb">OMR에 마킹한 것</div><div>${MOCK_CHECK_STU[picked]}</div></div></div>` : ''}`;
+  } else if(q.type === 'score'){
+    body = `
+      <div class="mock-boxes">
+        <div class="mock-boxes-t">&lt; 설 명 &gt;</div>
+        ${q.items.map((it, r)=>{
+          const scored = (it.marked === it.ok);
+          return `<div class="mock-box-row ${scored?'t':'f'}">
+          <span class="mk">${r+1}.</span>
+          <span class="tx">${escHtml(it.body)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
+            ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${mockSrcNote(it)}
+            ${mockSrcLine(it)}
+            ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
+            <div class="mock-rv-verdict ${scored?'t':'f'}">표에는 ${it.marked?'O':'X'}로 표시되어 있다 — ${scored?'옳게 표시되었으므로 1점':'잘못 표시되었으므로 0점'}.</div>
+          </span>
+        </div>`;}).join('')}
+      </div>
+      <div class="mock-rv-line ok"><span class="mk">${MOCK_MARK[q.ans]}</span>
+        <div><div class="lb">정답</div><div>${q.ans + 1}점 — 옳게 표시된 것이 ${q.ans + 1}개다</div></div></div>
+      ${(!blank && !ok) ? `<div class="mock-rv-line no"><span class="mk">${MOCK_MARK[picked]}</span>
+        <div><div class="lb">OMR에 마킹한 것</div><div>${picked + 1}점</div></div></div>` : ''}`;
+  } else if(q.type === 'essay'){
+    body = `
+      <div class="mock-boxes">
+        <div class="mock-boxes-t">&lt; 학 생 답 안 &gt;</div>
+        ${q.items.map(it=>`<div class="mock-box-row ${it.ok?'t':'f'}">
+          <span class="mk">${it.mark}</span>
+          <span class="tx"><b class="mock-lb">${it.label} :</b> ${escHtml(it.body)}
+            <span class="ox">${it.ok?'O':'X'}</span>${mockStarBtn(it.id)}${mockWhoTag(it)}${mockMineTag(it)}
+            ${it.note?`<div class="mock-rv-note">${escHtml(it.note)}</div>`:''}
+            ${mockSrcNote(it)}
+            ${mockSrcLine(it)}
+            ${!it.ok && it.fix?`<div class="mock-rv-note">이렇게 고치면 맞는 선지 — ${escHtml(it.fix)}</div>`:''}
+          </span>
+        </div>`).join('')}
+      </div>
+      <div class="mock-rv-line ok"><span class="mk">${MOCK_MARK[q.ans]}</span>
+        <div><div class="lb">정답</div><div>${q.items[q.ans].mark} — 답안에서 틀린 자리는 하나다</div></div></div>
+      ${(!blank && !ok) ? `<div class="mock-rv-line no"><span class="mk">${MOCK_MARK[picked]}</span>
+        <div><div class="lb">OMR에 마킹한 것</div><div>${q.items[picked].mark}</div></div></div>` : ''}`;
   } else if(boxType){
     body = `
       <div class="mock-boxes">
@@ -1695,7 +1813,7 @@ function renderMockReview(q, i, run){
           const statementTrue = (q.type === 'wrong') ? !isAns : isAns;
           // 비판 문항의 해설은 그 자체로 완결된 설명이라 앞머리를 붙이지 않는다
           // 비판·질문형은 해설이 그 자체로 완결되거나 결론을 verdict 가 따로 내므로 앞머리를 안 붙인다
-          const bare = { critique:1, qsolo:1, qpair:1 };
+          const bare = { critique:1, qsolo:1, qpair:1, same:1, crit2:1 };
           const head = bare[q.type] ? '' : ((statementTrue ? '함께 알아둘 것' : '왜 틀렸나') + ' — ');
           if(c.note && !(c.notes || []).length) notes += `<div class="mock-rv-note">${head}${escHtml(c.note)}</div>`;
           (c.notes || []).forEach(t=>{ notes += `<div class="mock-rv-note">${escHtml(t)}</div>`; });

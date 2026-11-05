@@ -65,6 +65,16 @@ for(const mode of ['formal', 'free']){
     buildMockSet().forEach(q=>{
       const names = q.who || (q.a ? [q.a, q.b] : null);
       if(!names || q.ism) return;
+      /* 서술형 평가는 발문에 사람을 적지 않는다 — 「근대 서양 사상가 갑, 을의 입장을
+         비교하여 서술하시오」가 그림 속 문제에 들어간다(기출이 그렇다). 그림을 따로 본다. */
+      if(q.type === 'essay'){
+        const task = mockEssayTask(q);
+        const eras2 = names.map(x=> mockEra(x));
+        const runs2 = eras2.filter((e, i)=> i === 0 || e !== eras2[i - 1]).length;
+        ok((task.match(/사상가 (갑|을)/g) || []).length === runs2, '서술형 문제의 시대 수식어 수가 다름: ' + task);
+        ok(names.every((x, i)=> task.indexOf(MOCK_TRIO_LB[i]) >= 0), '서술형 문제에 갑·을 표시 누락: ' + task);
+        return;
+      }
       n++;
       const stem = mockStemText(q);
       const eras = names.map(x=> mockEra(x));

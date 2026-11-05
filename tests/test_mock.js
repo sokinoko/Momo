@@ -145,6 +145,7 @@ function trioSet(who){
 }
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
 let qsoloQ = 0, checkQ = 0, qpairQ = 0, qboxQ = 0, trioAlgoQ = 0;
+let soloboxQ = 0, qsoloboxQ = 0, scoreQ = 0, essayQ = 0, sameQ = 0, sameboxQ = 0, crit2Q = 0;
 const shapeHist = {};
 const leftHist = {};
 let trioVennQ = 0, critQ = 0;
@@ -362,8 +363,12 @@ for(let d=1; d<=40 * SIZES.length; d++){
         if(!p) return;
         const pat = p[q.a] + p[q.b];
         if(q.type === 'qpair'){
-          // 정답만 「갑 예 · 을 아니요」
-          ok((pat === 'OX') === (ci === q.ans), tag + ' ' + (ci+1) + '선지 판정이 정답과 어긋남');
+          // 정답만 찾는 패턴 — 기출은 「갑 예 · 을 아니요」와 그 반대를 모두 쓴다
+          const want = q.rev ? 'XO' : 'OX';
+          ok((pat === want) === (ci === q.ans), tag + ' ' + (ci+1) + '선지 판정이 정답과 어긋남');
+        } else if(q.same){
+          // 「모두 공통의 대답」 — 둘의 대답이 같으면 참인 보기다
+          ok((pat === 'OO' || pat === 'XX') === c.ok, tag + ' 보기 ' + c.mark + ' 공통 대답 판정 불일치');
         } else {
           // 참인 보기는 둘 다 같은 대답
           ok((pat === (q.neg ? 'XX' : 'OO')) === c.ok, tag + ' 보기 ' + c.mark + ' 판정과 O/X 불일치');
@@ -406,6 +411,69 @@ for(let d=1; d<=40 * SIZES.length; d++){
           fit = ((at(spec[1]) + at(spec[2])) === spec[3]);
         }
         ok(fit === it.ok, tag + ' ' + it.zone + '자리(' + q.shape + ') 판정과 O/X 불일치');
+      });
+    } else if(q.type === 'solobox' || q.type === 'qsolobox'){
+      if(q.type === 'solobox') soloboxQ++; else qsoloboxQ++;
+      ok(mockCanon(q.ps.name, [q.ps.topic]) === q.name, tag + ' 제시문 사상가 불일치');
+      ok(q.items.length === 4, tag + ' 보기가 4개가 아님');
+      ok(new Set(q.items.map(x=> x.body)).size === 4, tag + ' 보기 문장 중복');
+      q.items.forEach(it=>{
+        const real = oxById[it.id].answer;
+        // 평서문이면 정답 보기가 O선지, 질문형이면 「부정의 대답」일 때 X선지가 정답
+        const want = it.ok ? (q.neg ? 'X' : 'O') : (q.neg ? 'O' : 'X');
+        ok(real === want, tag + ' 보기 ' + it.mark + ' 구조 오류');
+        ok(own(oxById[it.id].text, q.name), tag + ' 보기 ' + it.mark + ' 사상가 불일치');
+        if(q.type === 'qsolobox') ok(/(는가\?|인가\?)$/.test(it.body), tag + ' 보기 ' + it.mark + '가 질문형이 아님');
+      });
+      const trueMarks = q.items.filter(x=> x.ok).map(x=> x.mark).join(',');
+      ok(q.opts[q.ans].map(i=> q.items[i].mark).join(',') === trueMarks, tag + ' 정답 조합이 보기와 어긋남');
+    } else if(q.type === 'score'){
+      scoreQ++;
+      ok(mockCanon(q.ps.name, [q.ps.topic]) === q.name, tag + ' 제시문 사상가 불일치');
+      ok(q.items.length === 5, tag + ' 설명이 5개가 아님');
+      ok(new Set(q.items.map(x=> x.body)).size === 5, tag + ' 설명 문장 중복');
+      q.items.forEach(it=>{
+        ok(oxById[it.id].answer === (it.ok ? 'O' : 'X'), tag + ' 설명 ' + it.mark + ' O/X 불일치');
+        ok(own(oxById[it.id].text, q.name), tag + ' 설명 ' + it.mark + ' 사상가 불일치');
+      });
+      const got = q.items.filter(it=> it.marked === it.ok).length;
+      ok(got === q.ans + 1, tag + ' 점수 계산이 정답과 어긋남 (' + got + '점인데 정답은 ' + (q.ans+1) + '점)');
+      ok(q.ans >= 0 && q.ans <= 4, tag + ' 점수가 1~5점 밖이다');
+    } else if(q.type === 'essay'){
+      essayQ++;
+      ok(q.items.length === 5, tag + ' 답안이 5조각이 아님');
+      ok(new Set(q.items.map(x=> x.body)).size === 5, tag + ' 답안 문장 중복');
+      ok(q.items.filter(x=> !x.ok).length === 1, tag + ' 틀린 조각이 하나가 아님');
+      ok(!q.items[q.ans].ok, tag + ' 정답이 틀린 조각을 가리키지 않음');
+      ok(q.items.map(x=> x.label).join('|') === '갑|갑|을|을|갑과 을', tag + ' 답안 라벨 구성이 다름');
+      q.items.forEach(it=>{
+        const real = oxById[it.id].answer;
+        ok(real === (it.ok ? 'O' : 'X'), tag + ' 답안 ' + it.mark + ' O/X 불일치');
+        const whose = (it.label === '갑') ? q.a : (it.label === '을' ? q.b : null);
+        if(whose) ok(own(oxById[it.id].text, whose), tag + ' 답안 ' + it.mark + ' 사상가 불일치');
+      });
+    } else if(q.type === 'same' || q.type === 'samebox'){
+      if(q.type === 'same') sameQ++; else sameboxQ++;
+      const list = (q.type === 'same') ? q.choices : q.items;
+      list.forEach((c, ci)=>{
+        const isTrue = (q.type === 'same') ? (ci === q.ans) : c.ok;
+        ok(!!c.pat && !!c.pat[q.a] && !!c.pat[q.b], tag + ' 두 사람 판정이 다 있지 않음');
+        // 공통된 입장이면 둘 다 O, 아니면 적어도 한 사람이 X
+        ok((c.pat[q.a] === 'O' && c.pat[q.b] === 'O') === isTrue, tag + ' 공통 입장 판정과 정답이 어긋남');
+      });
+      if(q.type === 'samebox'){
+        const trueMarks = q.items.filter(x=> x.ok).map(x=> x.mark).join(',');
+        ok(q.opts[q.ans].map(i=> q.items[i].mark).join(',') === trueMarks, tag + ' 정답 조합이 보기와 어긋남');
+      }
+    } else if(q.type === 'crit2'){
+      crit2Q++;
+      const me = q.fromB ? q.b : q.a, you = q.fromB ? q.a : q.b;
+      q.choices.forEach((c, ci)=>{
+        ok(/모르고 있다\.$/.test(c.body), tag + ' ' + (ci+1) + '선지가 비판 꼴이 아님');
+        ok(!!c.pat && !!c.pat[q.a] && !!c.pat[q.b], tag + ' ' + (ci+1) + '선지에 두 사람 판정이 다 있지 않음');
+        // 비판이 성립하는 것은 「비판하는 쪽 O · 받는 쪽 X」 하나뿐이다
+        const fits = (c.pat[me] === 'O' && c.pat[you] === 'X');
+        ok(fits === (ci === q.ans), tag + ' ' + (ci+1) + '선지 비판 성립 여부와 정답이 어긋남');
       });
     } else {
       soloQ++;
@@ -557,8 +625,14 @@ ok(a === b, '같은 날 재생성 결과가 다름');
 console.log('검사한 문항 ' + totalQ + '개 — 단독 ' + soloQ + ' · 갑을 ' + pairQ + ' · 보기 ' + boxQ +
             ' · 벤 ' + vennQ + ' · 순서도 ' + algoQ + ' · 삼중 ' + trioQ +
             ' · 3중벤 ' + trioVennQ + ' · 비판 ' + critQ);
-console.log('  새 유형 — 질문형단독 ' + qsoloQ + ' · 체크표 ' + checkQ + ' · 질문형갑을 ' + qpairQ +
+console.log('  샤프 테마편 꼴 — 질문형단독 ' + qsoloQ + ' · 체크표 ' + checkQ + ' · 질문형갑을 ' + qpairQ +
             ' · 질문형보기 ' + qboxQ + ' · 3중순서도 ' + trioAlgoQ);
+console.log('  샤프 2~4회 꼴 — 1인보기 ' + soloboxQ + ' · 1인질문형보기 ' + qsoloboxQ +
+            ' · 점수환산 ' + scoreQ + ' · 서술형 ' + essayQ +
+            ' · 공통입장 ' + sameQ + ' · 공통입장보기 ' + sameboxQ + ' · 1:1비판 ' + crit2Q);
+[['1인보기',soloboxQ],['1인질문형보기',qsoloboxQ],['점수환산',scoreQ],['서술형',essayQ],
+ ['공통입장',sameQ],['공통입장보기',sameboxQ],['1:1비판',crit2Q]]
+  .forEach(([nm, v])=> ok(v > 0, nm + ' 유형이 한 번도 안 나옴'));
 console.log('  체크표 후보가 줄어드는 꼴(1→2→3→4줄) — ' +
             Object.keys(leftHist).sort().map(k=> k + ' ' + leftHist[k]).join(' · '));
 console.log('  3중 순서도 모양 — ' + MOCK_TRIO_ALGO_SHAPES.map(s=> s.k + ' ' + (shapeHist[s.k] || 0)).join(' · '));

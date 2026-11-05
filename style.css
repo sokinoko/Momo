@@ -1316,6 +1316,19 @@ mark.ps-clue{
 .mock-check thead th:not(.h), .mock-check tbody td:not(.st){ width:1.75em; font-weight:700; }
 .mock-check td.st{ padding:6px 6px; }
 
+/* 점수 환산표 — O·X 두 칸만 좁게 두고 환산법을 표 아래에 붙인다 */
+.mock-score thead th:not(.h), .mock-score tbody td:not(.st){ width:2.1em; }
+.mock-score tfoot td.rule{ text-align:left; font-size:11.5px; line-height:1.65;
+  color:var(--ink-soft); background:var(--paper-alt); padding:7px 8px; }
+
+/* 서술형 평가 — 문제와 학생 답안을 한 상자에 담는다 */
+.mock-essay{ margin:12px 0 4px; border:1px solid var(--rule-strong); background:var(--paper-alt);
+  font-family:var(--font-exam); font-size:13.5px; line-height:1.85; color:var(--ink); }
+.mock-essay-t{ text-align:center; font-weight:700; letter-spacing:3px;
+  padding:5px 8px; border-bottom:1px solid var(--rule-strong); }
+.mock-essay-q{ padding:7px 10px; border-bottom:1px dashed var(--rule); }
+.mock-essay-a{ padding:8px 10px; background:var(--paper); }
+
 /* 범주로 묶인 선지의 실제 사상가 이름 — 자체 제작 딱지와 같은 꼴, 색만 다르다 */
 .mock-who{
   display:inline-block; margin-left:5px; vertical-align:1px;
