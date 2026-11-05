@@ -144,6 +144,7 @@ function trioSet(who){
 let totalQ = 0, pairQ = 0, soloQ = 0, boxQ = 0, vennQ = 0, trioQ = 0, algoQ = 0;
 let qsoloQ = 0, checkQ = 0, qpairQ = 0, qboxQ = 0, trioAlgoQ = 0;
 const shapeHist = {};
+const leftHist = {};
 let trioVennQ = 0, critQ = 0;
 const algoHist = {}, vennHist = {};
 for(let d=1; d<=40 * SIZES.length; d++){
@@ -337,6 +338,15 @@ for(let d=1; d<=40 * SIZES.length; d++){
       q.pats.forEach((p, pi)=>{
         ok((p.join('') === truth) === (pi === q.ans), tag + ' ' + (pi+1) + '번 학생 패턴이 정답과 어긋남');
       });
+      /* 위에서 아래로 한 줄씩 맞춰 보며 후보를 지워 나가는 문항이다.
+         마지막 줄을 보기 전에 답이 하나로 좁혀지면 아래 줄이 장식이 된다. */
+      const tr = q.items.map(x=> x.ok ? 1 : 0);
+      const left = k=> q.pats.filter(p=>{ for(let i=0;i<k;i++) if(p[i] !== tr[i]) return false; return true; }).length;
+      ok(left(4) === 1, tag + ' 네 줄을 다 봐도 후보가 하나가 아님 (' + left(4) + ')');
+      ok(left(3) >= 2, tag + ' 세 줄만 보고 답이 나옴 — 마지막 줄이 장식이 된다');
+      for(let k=1;k<4;k++) ok(left(k) >= left(k+1), tag + ' 후보 수가 줄지 않음');
+      leftHist[[left(1), left(2), left(3), left(4)].join('→')] =
+        (leftHist[[left(1), left(2), left(3), left(4)].join('→')] || 0) + 1;
     } else if(q.type === 'qpair' || q.type === 'qbox'){
       if(q.type === 'qpair') qpairQ++; else qboxQ++;
       ok(mockCanon(q.psA.name, [q.psA.topic]) === q.a, tag + ' 갑 제시문 불일치');
@@ -547,6 +557,8 @@ console.log('검사한 문항 ' + totalQ + '개 — 단독 ' + soloQ + ' · 갑�
             ' · 3중벤 ' + trioVennQ + ' · 비판 ' + critQ);
 console.log('  새 유형 — 질문형단독 ' + qsoloQ + ' · 체크표 ' + checkQ + ' · 질문형갑을 ' + qpairQ +
             ' · 질문형보기 ' + qboxQ + ' · 3중순서도 ' + trioAlgoQ);
+console.log('  체크표 후보가 줄어드는 꼴(1→2→3→4줄) — ' +
+            Object.keys(leftHist).sort().map(k=> k + ' ' + leftHist[k]).join(' · '));
 console.log('  3중 순서도 모양 — ' + MOCK_TRIO_ALGO_SHAPES.map(s=> s.k + ' ' + (shapeHist[s.k] || 0)).join(' · '));
 MOCK_TRIO_ALGO_SHAPES.forEach(s=> ok((shapeHist[s.k] || 0) > 0, '3중 순서도 모양 ' + s.k + ' 가 한 번도 안 나옴'));
 const hist = (h)=> Object.keys(h).sort().map(k=> k + '문항 ' + h[k] + '세트').join(' · ');
