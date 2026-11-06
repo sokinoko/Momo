@@ -1,5 +1,8 @@
 # 빌드 결과물 — 배포는 GitHub Actions가 만든다
 ethics_note.html
+data.js
+sw.js
+manifest.webmanifest
 _site/
 _*.html
 # 입력 스크립트가 남기는 백업

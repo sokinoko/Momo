@@ -1337,3 +1337,7 @@ mark.ps-clue{
   font-family:var(--font-note); font-size:10.5px; line-height:1.5;
   color:var(--blue); letter-spacing:-.2px; white-space:nowrap;
 }
+
+/* 데이터가 오기 전에 잠깐 보이는 자리. app.js 가 그리기 시작하면 사라진다 */
+.boot{ padding:64px 20px; text-align:center; color:var(--ink-soft); font-size:14px; }
+.boot span{ display:block; margin-top:8px; font-size:12px; opacity:.75; }
