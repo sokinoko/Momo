@@ -1731,6 +1731,10 @@ function renderMockReview(q, i, run){
       </div>
       <div class="mock-rv-line ok"><span class="mk">${MOCK_MARK[q.ans]}</span>
         <div><div class="lb">정답</div><div>${MOCK_CHECK_STU[q.ans]} — ${q.items.map((it,r)=> it.ok ? (r+1) : null).filter(x=>x!==null).join(', ')}번에만 체크</div></div></div>
+      ${(q.left || []).length ? `<div class="mock-rv-note" style="margin-top:9px;">
+        위에서 한 줄씩 맞춰 보면 후보가 ${q.left.join(' → ')} 로 줄어든다 —
+        ${q.left.indexOf(1) >= 0 ? (q.left.indexOf(1) + '번째 줄에서 답이 나온다') : '네 줄을 다 봐야 답이 나온다'}.
+      </div>` : ''}
       ${(q.why || []).length ? `<div class="mock-boxes" style="margin-top:9px;">
         <div class="mock-boxes-t">학 생 별 로</div>
         ${q.why.map((t,i)=>`<div class="mock-box-row ${i===q.ans?'t':'f'}"><span class="tx">${escHtml(t)}</span></div>`).join('')}

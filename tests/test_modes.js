@@ -114,6 +114,49 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
   console.log('밀(공리주의)+자유주의 동시 출제 ' + both + '/60세트');
 }
 
+/* ---------- 칸트: 서양 근대의 칸트 ≠ 영구평화론의 칸트 ---------- */
+{
+  const kant = pool.byName['칸트'], pax = pool.byName['영구평화론'];
+  const allTopics = x=> (oxById[x.id] || {}).topics || [];
+  ok(!!pax, '영구평화론이 출제 풀에 없음');
+  ok(kant.O.concat(kant.X).every(x=> allTopics(x).indexOf('peace-theory') < 0), '서양 근대 칸트에 평화 이론 선지가 섞임');
+  const paxKant = pax.O.concat(pax.X).filter(x=> oxById[x.id] && oxById[x.id].text.indexOf('칸트') === 0);
+  ok(paxKant.length >= 20 && paxKant.every(x=> allTopics(x).indexOf('peace-theory') >= 0), '영구평화론의 칸트 선지는 전부 평화 이론 주제여야 함 (' + paxKant.length + ')');
+  ok(kant.ps.every(p=> p.topic !== 'peace-theory') && kant.ps.length >= 30, '서양 근대 칸트 제시문에 평화 이론 제시문이 섞임');
+  ok(pax.ps.length >= 5 && pax.ps.every(p=> p.topic === 'peace-theory'), '영구평화론 제시문은 평화 이론 주제만 (' + pax.ps.length + ')');
+  ok(mockMainUnit('칸트') === '서양' && mockMainUnit('영구평화론') === '이데올로기', '칸트는 서양, 영구평화론은 이데올로기');
+  ok(pool.usable.indexOf('영구평화론') >= 0 && pool.pairable.indexOf('영구평화론') >= 0, '영구평화론으로 단독·갑을을 못 만듦');
+  // 어떤 문항에서도 두 칸트의 선지·제시문이 섞이지 않는다
+  const bad = [];
+  for(let d=1; d<=20; d++){
+    STATE.quiz = { setNo:0, run:null, mode:'free' }; TODAY = '2026-10-' + String(d).padStart(2, '0');
+    buildMockSet().forEach(q=>{
+      namesOf(q).forEach(n=>{
+        if(n !== '칸트' && n !== '영구평화론') return;
+        itemIds(q).forEach(id=>{
+          const o = oxById[id]; if(!o || o.text.indexOf('칸트') !== 0) return;
+          const isPax = (o.topics || []).indexOf('peace-theory') >= 0;
+          if(n === '칸트' && isPax && namesOf(q).indexOf('영구평화론') < 0) bad.push(TODAY + ' 칸트 자리에 평화 이론 선지 ' + id);
+          if(n === '영구평화론' && !isPax && namesOf(q).indexOf('칸트') < 0) bad.push(TODAY + ' 영구평화론 자리에 서양 근대 칸트 선지 ' + id);
+        });
+      });
+      // 한 문항 안에 둘이 같이 서지는 않는다
+      const ns = namesOf(q);
+      ok(!(ns.indexOf('칸트') >= 0 && ns.indexOf('영구평화론') >= 0), TODAY + ' 한 문항에 칸트와 영구평화론이 같이 섰다');
+    });
+  }
+  ok(bad.length === 0, '칸트 구분 위반 ' + bad.slice(0, 3).join(' / '));
+  // 한 시험지에 둘이 따로 나오는 날이 있다 — 칸트가 두 번 나올 수 있다
+  let both2 = 0;
+  for(let d=1; d<=60; d++){
+    STATE.quiz = { setNo:d % 4, run:null, mode:'free' }; TODAY = '2026-10-' + String(1 + d % 28).padStart(2, '0');
+    const all = []; buildMockSet().forEach(q=> namesOf(q).forEach(n=> all.push(n)));
+    if(all.indexOf('칸트') >= 0 && all.indexOf('영구평화론') >= 0) both2++;
+  }
+  ok(both2 > 0, '칸트와 영구평화론이 한 시험지에 같이 나오는 경우가 없음');
+  console.log('칸트(서양 근대)+영구평화론 동시 출제 ' + both2 + '/60세트');
+}
+
 /* ---------- 자유 출제 크기 고르기 ---------- */
 {
   STATE.quiz = { setNo:0, run:null };
@@ -130,7 +173,8 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
   let sets = 0;
   const kHist = {};
   const ansPos = {};
-  const stat = { pairIn:0, vennAlgo:0 };
+  const stat = { pairIn:0, vennAlgo:0, solo:0 };
+  const budoHist = {}, firstHist = {}, oneofMiss = {};
   for(let d=1; d<=28; d++){
     for(let no=0; no<3; no++){
       STATE.quiz = { setNo:no, run:null, mode:'formal' };
@@ -163,6 +207,18 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
       });
       MOCK_FORMAL_MUST.forEach(n=> ok(has(n), tag + ' ' + n + ' 이(가) 안 나옴'));
       ok(has('벤담') !== has('밀'), tag + ' 공리주의는 둘 중 한 사람만 (벤담 ' + has('벤담') + ' · 밀 ' + has('밀') + ')');
+      /* 요즘 기출 경향 — 동양 8은 불교·도가 2~4 + 유교·근대 나머지 · 거의 다 비교형 ·
+         1번은 쉬운 단독(어려운 정약용·칸트는 아니다) · 하나는 꼭 나오는 묶음 */
+      const budo = set.slice(0, 8).filter(q=> MOCK_FORMAL_EAST_SUB[unitOfName(namesOf(q)[0])] === 'budo').length;
+      ok(budo >= 2 && budo <= 4, tag + ' 불교·도가가 ' + budo + '문항 (2~4여야 함)');
+      budoHist[budo] = (budoHist[budo] || 0) + 1;
+      const solo = set.filter(q=> MOCK_FORMAL_PLAIN_SOLO.indexOf(q.type) >= 0);
+      stat.solo += solo.length;
+      ok(solo.length <= 6, tag + ' 평범한 단독이 ' + solo.length + '문항 — 비교형 위주가 아님');
+      firstHist[MOCK_FORMAL_PLAIN_SOLO.indexOf(set[0].type) >= 0 ? '단독' : set[0].type] =
+        (firstHist[MOCK_FORMAL_PLAIN_SOLO.indexOf(set[0].type) >= 0 ? '단독' : set[0].type] || 0) + 1;
+      ok(MOCK_FORMAL_SOLO.indexOf(set[0].name) < 0, tag + ' 1번이 어려운 단독(' + set[0].name + ')');
+      MOCK_FORMAL_ONEOF.forEach(g=>{ if(!g.some(n=> has(n))) oneofMiss[g[0]] = (oneofMiss[g[0]] || 0) + 1; });
       const con = set.filter(q=> namesOf(q).some(n=> MOCK_FORMAL_CONTRACT.indexOf(n) >= 0));
       ok(con.length === 1, tag + ' 사회계약설은 정확히 한 문항 (' + con.length + ')');
       if(con.length){
@@ -189,6 +245,14 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
     }
   }
   ok(kHist[1] > 0 && kHist[2] > 0 && kHist[3] > 0, '사회계약설 1·2·3명이 모두 나와야 함 ' + JSON.stringify(kHist));
+  ok(budoHist[2] > 0 && budoHist[3] > 0 && budoHist[4] > 0, '불교·도가가 2·3·4문항 모두 나와야 함 ' + JSON.stringify(budoHist));
+  ok(budoHist[3] > budoHist[2] && budoHist[3] > budoHist[4], '불교·도가는 3문항이 가장 흔해야 함 ' + JSON.stringify(budoHist));
+  ok((firstHist['단독'] || 0) >= sets * 0.8, '1번은 대개 쉬운 단독이어야 함 ' + JSON.stringify(firstHist));
+  ok(stat.solo / sets <= 4.5, '평범한 단독이 세트당 ' + (stat.solo / sets).toFixed(1) + '문항 — 비교형 위주가 아님');
+  MOCK_FORMAL_ONEOF.forEach(g=> ok((oneofMiss[g[0]] || 0) <= sets * 0.25,
+    g[0] + ' 묶음이 ' + (oneofMiss[g[0]] || 0) + '/' + sets + '세트에서 빠짐'));
+  console.log('불교·도가 문항 수 ' + JSON.stringify(budoHist) + ' · 단독 세트당 ' + (stat.solo / sets).toFixed(1));
+  console.log('1번 유형 ' + JSON.stringify(firstHist) + ' · 묶음 누락 ' + JSON.stringify(oneofMiss));
   ok(ansPos[4] > 0 && ansPos[0] > 0, '정답이 ⑤에도 ①에도 나와야 함 ' + JSON.stringify(ansPos));
   console.log('갑·을 5지선다 정답 위치 ' + JSON.stringify(ansPos));
   console.log('사회계약설 인원 분포 ' + JSON.stringify(kHist));
@@ -294,7 +358,8 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
   Object.keys(pool.pairs).forEach(k=>{ const ab = k.split('|'); ok(!mockSameSchool(ab[0], ab[1]), '금지된 짝 ' + k); });
   Object.keys(pool.diffs).forEach(k=>{ const ab = k.split('|'); ok(!mockSameSchool(ab[0], ab[1]), '금지된 차이 짝 ' + k); });
   ok(mockSameSchool('스미스', '하이에크') && !mockSameSchool('스미스', '케인스') && !mockSameSchool('케인스', '하이에크'), '스미스·하이에크는 같이 안 냄');
-  ok(mockIdeoBan('홉스', '칸트') && !mockIdeoBan('칸트', '흄') && !mockIdeoBan('공화주의', '자유주의'), '묶음 규칙');
+  ok(mockIdeoBan('홉스', '영구평화론') && !mockIdeoBan('칸트', '흄') && !mockIdeoBan('공화주의', '자유주의'), '묶음 규칙');
+  ok(mockSameSchool('칸트', '영구평화론') && mockSameSchool('밀', '자유주의'), '주제로 갈라 놓은 같은 사람이 갑·을로 묶임');
   // 정형화·자유 모드 전체에서 이데올로기끼리의 세트가 규칙을 지킨다
   let checked = 0;
   ['formal', 'free'].forEach(mode=>{
