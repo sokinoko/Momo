@@ -82,7 +82,8 @@ OX_ITEMS.concat(CMP_ITEMS).forEach(o=>{ oxById[o.id] = o; });
   STATE.ox.rec[pair.id] = { seen:6, wrong:2, due:0, streak:0 };                         // 이황·이이 각 6번 중 2번
   STATE.quiz = { setNo:0, run:null };
   STATE.ps = { stars:{}, hist:{}, rec:{} };
-  const kp = PASSAGES.filter(p=> p.name === '칸트').slice(0, 2);
+  // 평화 이론 제시문은 「영구평화론」으로 가므로 서양 근대 칸트 제시문만 고른다
+  const kp = PASSAGES.filter(p=> p.name === '칸트' && p.topic === 'kant').slice(0, 2);
   kp.forEach(p=>{ STATE.ps.rec[p.id] = { seen:2, wrong:2, due:0, streak:0 }; });        // 칸트 제시문 4번 중 4번
 
   const ox = weakRows('ox');

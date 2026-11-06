@@ -746,10 +746,13 @@ const MOCK_CATS = {
   // 급진개화파는 제시문이 아직 없어 출제는 못 한다 (박영효 선지 3개만 있음) — 제시문이 생기면 바로 나온다
   '급진개화파':['박영효','김옥균']
 };
-/* 같은 이름이 두 사상에 걸친 사람. 밀은 공리주의자이면서 자유주의자다 — 주제가 국가의 역할(state-role)인
-   선지·제시문은 「자유주의」(범주)로, 나머지는 「밀」(공리주의)로 가른다. 한 시험지에 둘이 따로 나올 수 있고
-   선지와 제시문은 절대 섞이지 않는다. (밀의 자유주의 선지는 utilitarianism 태그가 같이 붙어 있어도 state-role 이 우선) */
-const MOCK_SPLIT_BY_TOPIC = { '밀': { topic:'state-role', to:'자유주의' } };
+/* 같은 이름이 두 사상에 걸친 사람. 밀은 공리주의자이면서 자유주의자고, 칸트는 서양 근대 의무론자이면서
+   평화 이론의 사상가다 — 주제가 국가의 역할(state-role)인 밀의 선지·제시문은 「자유주의」로, 평화
+   이론(peace-theory)인 칸트의 선지·제시문은 「영구평화론」으로 가른다. 나머지는 「밀」·「칸트」 그대로다.
+   그래서 한 시험지에 둘이 따로 나올 수 있고(칸트가 두 번 나올 수 있다) 선지와 제시문은 절대 섞이지 않는다.
+   (kant 태그가 같이 붙어 있어도 peace-theory 가 우선 · 밀도 utilitarianism 보다 state-role 이 우선) */
+const MOCK_SPLIT_BY_TOPIC = { '밀': { topic:'state-role', to:'자유주의' },
+                              '칸트': { topic:'peace-theory', to:'영구평화론' } };
 let MOCK_CAT_OF = null;
 function mockCanon(n, topics){
   if(!MOCK_CAT_OF){
@@ -1062,15 +1065,27 @@ function buildMockQuota(pool, rng, used, qs){
 
 /* 순서도·벤다이어그램처럼 그림이 들어가는 문항이 한곳에 몰리면 시험지가 이상해진다.
    다 만든 뒤에 고르게 흩어 놓는다. 자리만 바꾸는 것이라 뽑히는 문제는 그대로고,
-   rng 를 맨 마지막에 쓰므로 같은 날·같은 세트면 자리도 똑같다. */
+   rng 를 맨 마지막에 쓰므로 같은 날·같은 세트면 자리도 똑같다.
+   **그림이 아닌 문항도 같이 섞는다.** 출제기는 배당된 것부터 만든다 — 정형화는 꼭 나오는
+   비교(이황·이이, 주자·양명) → 꼭 나오는 단독(정약용·칸트) → 사회계약설 → 꼭 나오는 학자 →
+   자율 순이고, 자유 출제도 고정 사상가(칸트·스피노자)를 맨 앞에서 만든다. 만든 순서를 그대로
+   쓰면 단원 앞머리에 늘 같은 문항이 줄줄이 선다. 정형화의 동양 8 → 서양 8 → 이데올로기 4 는
+   단원마다 따로 섞으므로 그대로 지켜진다. */
 const MOCK_SPREAD_TYPES = { algo:1, venn:1, trioVenn:1, critique:1, trioAlgo:1 };
 function mockSpread(qs, rng){
-  const figRaw = [], rest = [];
-  qs.forEach(q=> (MOCK_SPREAD_TYPES[q.type] ? figRaw : rest).push(q));
+  const figRaw = [], restRaw = [];
+  qs.forEach(q=> (MOCK_SPREAD_TYPES[q.type] ? figRaw : restRaw).push(q));
   // 순서도가 늘 앞, 벤이 늘 뒤로 가지 않게 유형 순서도 섞는다
   const fig = shuffleSeeded(figRaw, rng);
+  const rest = shuffleSeeded(restRaw, rng);
   const n = qs.length, k = fig.length;
-  if(k < 2 || k * 2 > n) return qs;            // 흩을 여유가 없으면 그대로 둔다
+  if(!k) return rest;
+  if(k * 2 > n){                               // 흩을 여유가 없다 — 그림 사이에 나머지를 하나씩 끼운다
+    const out = [];
+    for(let i=0;i<k;i++){ out.push(fig[i]); if(i < rest.length) out.push(rest[i]); }
+    for(let i=k;i<rest.length;i++) out.push(rest[i]);
+    return out;
+  }
   const gap = n / k;
   const pos = [];
   let last = -2;
@@ -1084,7 +1099,7 @@ function mockSpread(qs, rng){
   for(let i=k-1;i>0;i--){                      // 끝에서 밀린 만큼 앞으로 당긴다
     if(pos[i] - pos[i-1] < 2) pos[i-1] = pos[i] - 2;
   }
-  if(pos[0] < 0) return qs;
+  if(pos[0] < 0) return fig.concat(rest);
   const out = new Array(n);
   pos.forEach((p, i)=> out[p] = fig[i]);
   let r = 0;
@@ -1382,14 +1397,17 @@ const MOCK_ERA = {
   'existentialism-atheistic':'현대 서양', 'existentialism-theistic':'현대 서양'
 };
 const MOCK_UNIT_ERA = { 이데올로기:'사회', 서양:'서양', 유교:'동양', 불교:'동양 불교', 도가:'동양', 근대:'근대 한국' };
-// 학파 이름과 그 학파에 속한 사람은 갑·을로 묶지 않는다 (대조가 성립하지 않음)
-const MOCK_SAME_SCHOOL = [['스토아학파','아우렐리우스','에픽테토스','키케로','세네카'], ['스미스','하이에크']];
+/* 학파 이름과 그 학파에 속한 사람은 갑·을로 묶지 않는다 (대조가 성립하지 않음).
+   주제로 갈라 놓은 같은 사람도 마찬가지다 — 한 문항 안에서 칸트와 영구평화론, 밀과 자유주의를
+   갑·을로 세우면 같은 사람을 자기와 대조하는 꼴이 된다. 다른 문항으로는 따로 나와도 된다. */
+const MOCK_SAME_SCHOOL = [['스토아학파','아우렐리우스','에픽테토스','키케로','세네카'], ['스미스','하이에크'],
+                          ['칸트','영구평화론'], ['밀','자유주의']];
 /* 이데올로기는 주제마다 쌍으로 묶어 비교한다 — 같은 주제 안의 사람끼리만. (생윤처럼)
    두 사람이 모두 어느 주제 묶음에 속하는데 겹치는 묶음이 없으면 짝으로 쓰지 않는다. */
 const MOCK_IDEO_GROUPS = {
   '국가의 역할':['공화주의','자유주의'], '자본주의':['스미스','케인스','하이에크'],
   '자본주의의 대안':['마르크스','민주 사회주의'], '사회계약설':['홉스','로크','루소'],
-  '평화 이론':['칸트','갈퉁','생피에르','에라스뮈스','묵자'],
+  '평화 이론':['영구평화론','갈퉁','생피에르','에라스뮈스','묵자'],
   '이상 사회론':['플라톤','모어','마르크스','롤스'],
   '민주주의':['슘페터','하버마스','페리클레스','롤스'],
   '세계시민주의와 해외 원조':['롤스','싱어','누스바움']
@@ -1901,31 +1919,79 @@ function buildQBoxQ(a, b, unit, rng, pairTopic){
    「다음을 주장한 사상가의 관점에만 모두 '✓'를 표시한 학생은?」
    문장 넷에 그 사람의 O/X 를 매겨 두면 정답 체크 패턴이 저절로 정해진다.
 
-   학생 다섯을 아무렇게나 고르면 첫 줄만 보고 답이 나와 아래 세 줄이 장식이 된다.
-   이 문항은 위에서 아래로 한 줄씩 맞춰 보며 후보를 지워 나가는 것이므로,
-   **한 줄에 한 명씩** 떨어져 마지막 줄까지 봐야 하나가 남도록 고른다.
-     첫 번째로 어긋나는 줄이 4행인 학생 · 3행인 학생 · 2행인 학생 · 1행인 학생을 하나씩.
-     그러면 남는 후보가 5 → 4 → 3 → 2 → 1 로 줄고, 4행을 보기 전까지 둘이 남는다.
-   어긋나는 줄 아래쪽은 같아도 되고 달라도 되므로 거기서 모양을 섞는다. */
+   학생 다섯을 아무렇게나 고르면 한두 줄만 보고 답이 나와 아래가 장식이 된다.
+   줄마다 몇 명이 떨어지는지는 아래 MOCK_CHECK_DROPS 가 정한다. */
 const MOCK_CHECK_STU = ['갑','을','병','정','무'];
+/* 학생 다섯의 체크 패턴.
+   위에서 아래로 한 줄씩 맞춰 보며 후보를 지워 나가는 문항이라, 중요한 것은
+   「어느 줄에서 몇 명이 떨어지는가」다. 기출 셋을 재 보면 한 꼴이 아니다 —
+     테마편 2회 7번  남는 후보 5→3→2→2→1  (2·1·0·1)  셋째 줄은 아무도 못 떨어뜨린다
+     테마편 4회 3번  남는 후보 5→3→2→1→1  (2·1·1·0)  셋째 줄에서 이미 답이 나온다
+     테마편 4회 6번  남는 후보 5→3→2→1→1  (2·1·1·0)
+   그래서 4→3→2→1 한 꼴로 고정하지 않는다. 지켜야 하는 것은 이것뿐이다.
+     · 네 줄을 다 맞춰 보면 꼭 하나만 남는다
+     · 두 줄만 보고는 답이 나오지 않는다 (기출 셋 다 두 줄 뒤 후보가 둘 이상)
+     · 아무도 못 떨어뜨리는 줄은 많아야 하나 — 그래야 네 줄 가운데 셋은 일을 한다
+     · 어느 줄도 다섯 학생이 똑같지 않다 (한 줄이 통째로 장식이 되지 않게)
+   네 자리에 떨어질 사람 수를 배분한 꼴을 미리 적어 두고 그중 하나를 뽑아 쓴다.
+   첫 줄이 0인 꼴은 없다 — 아직 아무도 탈락하지 않아 다섯이 똑같아져 버린다.
+   k번째 줄에서 처음 어긋나는 학생은 그 위가 정답과 같고 그 줄이 반대로 묶여 있어
+   아래 4-k칸만 자유다. 그래서 한 줄에서 떨어질 수 있는 사람은 최대 2^(4-k)명이고,
+   마지막 줄은 패턴이 하나뿐이라 **둘이 될 수 없다**(e4 ≤ 1 · e3 ≤ 2). 여덟 꼴이 남는다. */
+const MOCK_CHECK_DROPS = [
+  [1,1,1,1],
+  [1,0,2,1], [2,0,1,1],
+  [1,2,0,1], [2,1,0,1],
+  [1,1,2,0], [1,2,1,0], [2,1,1,0]
+];
 function mockCheckPats(truth, rng){
+  const N = truth.length;
   const key = p=> p.join('');
-  const flip = (idx)=> truth.map((v, i)=> idx.indexOf(i) >= 0 ? (v ? 0 : 1) : v);
-  const seen = {}; const out = [truth];
-  seen[key(truth)] = 1;
-  const push = (p)=>{ const k = key(p); if(seen[k]) return false; seen[k] = 1; out.push(p); return true; };
-  // 첫 어긋남이 아래쪽 줄인 학생부터 — 그래야 그 학생이 마지막까지 후보로 남는다
-  for(let first=truth.length-1; first>=0; first--){
-    const tail = [];
-    for(let j=first+1;j<truth.length;j++) if(rng() < 0.5) tail.push(j);
-    if(!push(flip([first].concat(tail)))) push(flip([first]));
+  const other = i=> truth[i] ? 0 : 1;
+  const plans = shuffleSeeded(MOCK_CHECK_DROPS, rng);
+  for(let d=0; d<plans.length; d++){
+    const plan = plans[d];
+    for(let attempt=0; attempt<40; attempt++){
+      const seen = {}; seen[key(truth)] = 1;
+      const made = [];
+      let okAll = true;
+      // 자리마다 「그 줄에서 처음 어긋나는 학생」을 그 수만큼 만든다.
+      // 그 줄 위는 정답과 같고, 그 줄은 반대, 그 아래는 자유다
+      for(let row=0; row<N && okAll; row++){
+        for(let c=0; c<plan[row]; c++){
+          let p = null;
+          for(let t=0; t<24 && !p; t++){
+            const q = truth.slice();
+            q[row] = other(row);
+            for(let j=row+1;j<N;j++) q[j] = (rng() < 0.5) ? 1 : 0;
+            if(!seen[key(q)]) p = q;
+          }
+          if(!p){ okAll = false; break; }
+          seen[key(p)] = 1;
+          made.push({ p:p, first:row });
+        }
+      }
+      if(!okAll || made.length !== 4) continue;
+      // 아무도 못 떨어뜨리는 줄도 다섯이 똑같아서는 안 된다 —
+      // 그 줄에서 이미 탈락해 있는 학생 하나를 반대로 돌려 준다
+      let fine = true;
+      for(let row=0; row<N && fine; row++){
+        if(plan[row] > 0) continue;
+        const dead = made.filter(x=> x.first < row);
+        if(dead.some(x=> x.p[row] !== truth[row])) continue;
+        if(!dead.length){ fine = false; break; }
+        const pickD = dead[Math.floor(rng() * dead.length)];
+        delete seen[key(pickD.p)];
+        pickD.p[row] = other(row);
+        if(seen[key(pickD.p)]){ fine = false; break; }
+        seen[key(pickD.p)] = 1;
+      }
+      if(!fine) continue;
+      if(Object.keys(seen).length !== 5) continue;      // 다섯이 다 달라야 한다
+      return [truth].concat(made.map(x=> x.p));
+    }
   }
-  if(out.length < 5){                                  // 같은 패턴이 겹쳤으면 남는 것으로 채운다
-    const all = [];
-    for(let m=0;m<16;m++) all.push([0,1,2,3].map(i=> (m >> i) & 1));
-    shuffleSeeded(all, rng).forEach(p=>{ if(out.length < 5) push(p); });
-  }
-  return out.length === 5 ? out : null;
+  return null;
 }
 // 위에서부터 k줄을 맞춰 봤을 때 남는 후보 수 — 테스트와 해설이 같은 셈을 쓴다
 function mockCheckLeft(pats, truth, k){
@@ -1958,8 +2024,11 @@ function buildCheckQ(n, rng){
     const first = p.findIndex((v, r)=> v !== truth[r]);
     return MOCK_CHECK_STU[i] + ' — ' + (first + 1) + '번에서 걸린다. ' + bad.join(', ') + '.';
   });
+  // 줄마다 후보가 몇 명 남는가 — 푸는 요령을 그대로 보여 준다
+  const left = [pats.length];
+  for(let k=1;k<=truth.length;k++) left.push(mockCheckLeft(pats, truth, k));
   return { type:'check', name:n, ps:shuffleSeeded(b.ps, rng)[0],
-           items:rows, pats:pats, choices:choices, ans:ans, why:why };
+           items:rows, pats:pats, choices:choices, ans:ans, why:why, left:left };
 }
 
 /* ---------- 공통된 입장 · 1:1 비판 ----------
@@ -2878,9 +2947,18 @@ function buildThemeSet(){
    동양 8 · 서양 8 · 이데올로기 4 = 20문항 고정. 시험지 순서도 동양 → 서양 → 이데올로기.
    꼭 나오는 비교: 이황vs이이 · 주자vs양명 (한 문항에 둘이 같이)
    꼭 나오는 단독: 정약용 · 칸트 (단독 옳은/옳지 않은)
-   단독·비교 가리지 않고 꼭 나오는 학자: 스피노자 흄 맹자 순자 지눌 원효 스토아학파 에피쿠로스
-   공리주의(벤담·밀 가운데 한 사람 — 둘을 서로 비교하지는 않는다) · 사회계약설(홉스·로크·루소 —
-   정확히 한 문항을 배당하고, 그 문항에 한 명·두 명·세 명 중 몇이 들어가든 상관없다. 나머지 문항에는 안 나온다)
+   단독·비교 가리지 않고 꼭 나오는 학자: 스피노자 흄 스토아학파 에피쿠로스
+   하나는 꼭 나오는 묶음(MOCK_FORMAL_ONEOF): 공리주의(벤담·밀 — 둘을 서로 비교하지는 않는다) ·
+   고대 유교(공자·맹자·순자) · 근대 한국 사상 · 도가(노자·장자) · 불교의 한 사람(원효·지눌·의천·혜능)
+   사회계약설(홉스·로크·루소)은 정확히 한 문항을 배당하고, 그 문항에 한 명·두 명·세 명 중 몇이
+   들어가든 상관없다. 나머지 문항에는 안 나온다.
+   동양 8은 다시 갈린다 — 불교·도가를 합쳐 보통 3문항(MOCK_FORMAL_EAST_BUDO, 둘일 때도 넷일 때도 있다),
+   남는 5~6은 유교와 근대 한국 사상이다. 요즘 기출의 동양은 대개 「고대 유교 · 주자vs양명 ·
+   이황vs이이 · 정약용 · 근대 한국」 꼴이다.
+   **요즘은 거의 다 비교형이다.** 평범한 단독(옳은/옳지 않은)은 꼭 단독으로 내는 사람(정약용·칸트)과
+   단독이 잘 어울리는 사람(MOCK_FORMAL_SOLO_OK)에게만 맡기고, 나머지 자리는 비교형을 먼저 시도한 뒤
+   재료가 없을 때만 단독으로 물러난다 — 막는 것이 아니라 뒤로 미루는 것이다.
+   시험지 1번은 쉬운 단독이 오게 자리만 바꿔 준다(정약용·칸트는 어려운 단독이라 빼고 고른다).
    밀은 공리주의의 밀과 자유주의의 밀을 따로 본다(MOCK_SPLIT_BY_TOPIC) — 한 시험지에 둘 다 나올 수 있다
    갑·을 5지선다는 ⑤번이 언제나 「갑과 을」 비교 선지다(buildPairQ opt.fifth).
    나머지 자리는 자율. 정형 학자(칸트·정약용)는 다른 문항의 짝으로 쓰지 않아 단독을 지킨다. */
@@ -2889,8 +2967,19 @@ const MOCK_FORMAL_BUCKET = { 유교:'east', 불교:'east', 도가:'east', 근대
 const MOCK_FORMAL_UNIT = { 벤담:'서양', 밀:'서양', 칸트:'서양', 홉스:'이데올로기', 로크:'이데올로기', 루소:'이데올로기' };
 const MOCK_FORMAL_PAIRS = [['이황','이이'], ['주자','왕수인']];
 const MOCK_FORMAL_SOLO = ['정약용', '칸트'];
-const MOCK_FORMAL_MUST = ['스피노자','흄','맹자','순자','지눌','원효','스토아학파','에피쿠로스'];
-const MOCK_FORMAL_ONEOF = [['벤담','밀']];                        // 공리주의: 둘 중 한 사람
+const MOCK_FORMAL_SOLO_OK = ['아리스토텔레스'];     // 단독으로 내도 어울리는 사람 — 비교형을 앞세우지 않는다
+const MOCK_FORMAL_FIRST = ['공자', '맹자', '순자'];  // 1번 자리에 놓을 쉬운 동양 단독 (고대 유교 하나)
+const MOCK_FORMAL_PLAIN_SOLO = ['right', 'wrong'];  // 뒤로 미루는 평범한 단독
+const MOCK_FORMAL_MUST = ['스피노자','흄','스토아학파','에피쿠로스'];
+const MOCK_FORMAL_ONEOF = [['벤담','밀'],                          // 공리주의: 둘 중 한 사람
+  ['공자','맹자','순자'],                                          // 고대 유교 하나
+  ['위정척사','온건개화파','동학','원불교','증산교'],               // 근대 한국 사상 하나
+  ['노자','장자'],                                                 // 도가 하나
+  ['원효','지눌','의천','혜능']];                                   // 불교 하나
+/* 동양 8의 속 구성 — 불교·도가를 합쳐 몇 문항인가. 보통 셋이고 둘일 때도 있다.
+   넷까지 가는 것은 공사상(부파·대승)을 따로 묻는 세트 정도라 드물게만 뽑는다. */
+const MOCK_FORMAL_EAST_BUDO = [2, 2, 3, 3, 3, 3, 3, 3, 4];
+const MOCK_FORMAL_EAST_SUB = { 불교:'budo', 도가:'budo', 유교:'ru', 근대:'ru' };
 const MOCK_FORMAL_CONTRACT = ['홉스','로크','루소'];             // 사회계약설: 한 문제를 배당 — 한 명이든 둘이든 셋이든
 const MOCK_FORMAL_EXCL = [['벤담','밀']];                           // 둘을 비교하지 않고, 한 사람만 낸다
 
@@ -2909,9 +2998,14 @@ function buildFormalSet(){
   const reserved = {};                       // 사회계약설 세 사람은 자기 문항 밖에서는 짝으로도 못 쓴다
   MOCK_FORMAL_CONTRACT.forEach(n=>{ reserved[n] = 1; });
   const ex = {};
+  // 동양 8의 속 구성 — 불교·도가 묶음과 유교·근대 묶음
+  const budoN = MOCK_FORMAL_EAST_BUDO[Math.floor(rng() * MOCK_FORMAL_EAST_BUDO.length)];
+  const sub = { budo:budoN, ru:MOCK_FORMAL_QUOTA.east - budoN };
+  const subOf = n=> MOCK_FORMAL_EAST_SUB[unitOf(n)] || null;
 
   const put = (r, bucket)=>{
     out[bucket].push(r.q); left[bucket]--;
+    if(bucket === 'east'){ const k = subOf(r.names[0]); if(k) sub[k]--; }
     r.names.forEach(m=>{
       used[m] = 1;
       MOCK_FORMAL_EXCL.forEach(g=>{ if(g.indexOf(m) >= 0) g.forEach(x=>{ used[x] = 1; }); });
@@ -2925,15 +3019,27 @@ function buildFormalSet(){
   const gen = (n, extra)=>{
     const b = bucketOf(n);
     if(!b || left[b] <= 0 || !pool.byName[n]) return null;
+    if(b === 'east'){ const k = subOf(n); if(k && sub[k] <= 0) return null; }
     const c = Object.assign({ unit:unitOf(n), ex:ex, fifth:true,
       pairOk:(x, y)=> !exclWith(x, y),
       ban:m=> used[m] || soloKeep[m] || reserved[m] || exclWith(n, m) || bucketOf(m) !== b }, extra || {});
-    if(!c.order && !c.types) c.types = types(MOCK_ALL_TYPES);
+    // 비교형을 먼저 시도하고 평범한 단독은 맨 뒤로 — 꼭 단독으로 내는 사람과 단독이 어울리는 사람만 빼 준다
+    if(!c.order && !c.types){
+      const all = types(MOCK_ALL_TYPES);
+      if(soloKeep[n] || MOCK_FORMAL_SOLO_OK.indexOf(n) >= 0) c.types = all;
+      else c.order = mockTypeOrder(rng, all.filter(t=> MOCK_FORMAL_PLAIN_SOLO.indexOf(t) < 0))
+                       .concat(mockTypeOrder(rng, types(MOCK_FORMAL_PLAIN_SOLO)));
+    }
     const r = mockGenQ(n, rng, c);
     if(r){ put(r, b); return r; }
     return null;
   };
 
+  // 0) 1번 자리에 놓을 쉬운 동양 단독 — 고대 유교 한 사람. 재료가 없으면 건너뛴다
+  {
+    const cands = shuffleSeeded(MOCK_FORMAL_FIRST, rng);
+    for(let i=0;i<cands.length;i++){ if(gen(cands[i], { types:['right','wrong'], ban:()=> true })) break; }
+  }
   // 1) 꼭 나오는 비교 — 한 문항에 둘이 같이. 재료가 안 되면 각자 단독으로라도 둘 다 낸다
   MOCK_FORMAL_PAIRS.forEach(pr=>{
     const [a, b] = shuffleSeeded(pr, rng);
@@ -2961,7 +3067,9 @@ function buildFormalSet(){
   const musts = MOCK_FORMAL_MUST.map(n=> [n]).concat(MOCK_FORMAL_ONEOF);
   shuffleSeeded(musts, rng).forEach(group=>{
     if(group.some(n=> used[n])) return;
-    gen(shuffleSeeded(group, rng)[0]);
+    // 묶음은 하나만 나오면 된다 — 재료나 자리가 안 되면 같은 묶음의 다른 사람으로 넘어간다
+    const cands = shuffleSeeded(group, rng);
+    for(let i=0;i<cands.length;i++){ if(gen(cands[i])) return; }
   });
   // 5) 남은 자리는 자율 — 이 단원에서 아직 안 나온 사람으로
   ['east', 'west', 'ideo'].forEach(b=>{
@@ -2971,7 +3079,38 @@ function buildFormalSet(){
       gen(cands[i]);
     }
   });
-  return ['east', 'west', 'ideo'].reduce((all, b)=> all.concat(mockSpread(out[b], rng)), []);
+  // 6) 그래도 빈자리가 남으면 동양 속 구성(불교·도가 몫)을 풀고 채운다 — 자리를 비우는 것보다 낫다
+  if(['east', 'west', 'ideo'].some(b=> left[b] > 0)){
+    sub.budo = MOCK_FORMAL_QUOTA.east; sub.ru = MOCK_FORMAL_QUOTA.east;
+    ['east', 'west', 'ideo'].forEach(b=>{
+      if(left[b] <= 0) return;
+      const rest = pool.usable.concat(pool.pairable).filter((n, i, a)=> a.indexOf(n) === i)
+        .filter(n=> !used[n] && !soloKeep[n] && !reserved[n] && bucketOf(n) === b);
+      const cands = shuffleSeeded(rest, rng);
+      for(let i=0;i<cands.length && left[b] > 0;i++){
+        if(used[cands[i]]) continue;
+        gen(cands[i], { types:MOCK_ALL_TYPES }) || gen(cands[i], { types:MOCK_ALL_TYPES, ex:{} });
+      }
+    });
+  }
+  const set = ['east', 'west', 'ideo'].reduce((all, b)=> all.concat(mockSpread(out[b], rng)), []);
+  /* 1번은 쉬운 문항으로. 첫째로 평범한 단독 — 어려운 단독(정약용·칸트)은 빼고 고른다. 그런 단독이
+     없으면 고대 유교 문항을 앞으로 당긴다. 그림이 아닌 문항끼리 자리만 맞바꾸므로 흩어 놓은
+     그림 자리는 건드리지 않는다. */
+  if(set.length && !MOCK_SPREAD_TYPES[set[0].type]){
+    const inEast = i=> i < MOCK_FORMAL_QUOTA.east;
+    const easy = q=> !MOCK_SPREAD_TYPES[q.type];
+    const ancient = MOCK_FORMAL_ONEOF.filter(g=> g.indexOf('공자') >= 0)[0] || [];
+    const nameIn = (q, g)=> (q.who || [q.a, q.b, q.name]).some(x=> x && g.indexOf(x) >= 0);
+    const spare = q=> MOCK_FORMAL_PLAIN_SOLO.indexOf(q.type) >= 0 && MOCK_FORMAL_SOLO.indexOf(q.name) < 0;
+    if(!spare(set[0])){
+      let j = set.findIndex((q, i)=> inEast(i) && easy(q) && spare(q));
+      if(j < 0 && !nameIn(set[0], ancient))
+        j = set.findIndex((q, i)=> inEast(i) && easy(q) && nameIn(q, ancient));
+      if(j > 0){ const t = set[0]; set[0] = set[j]; set[j] = t; }
+    }
+  }
+  return set;
 }
 
 /* ---------- 응시 상태 ---------- */

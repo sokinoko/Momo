@@ -37,14 +37,16 @@ const start = appSrc.indexOf('const MOCK_SIZES');
 const end   = appSrc.indexOf('/* ---------- 학습 기록 백업 · 복원 ---------- */');
 if(start < 0 || end < 0 || end < start){ console.error('app.js 에서 모의고사 구간을 찾지 못했습니다'); process.exit(1); }
 eval(appSrc.slice(start, end)
-  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO|MOCK_TRIO_PERM|MOCK_CHECK_STU|MOCK_TRIO_ALGO_SHAPES|MOCK_ALIAS|MOCK_CATS)\b/gm, 'global.$1')
+  .replace(/^const (MOCK_SIZES|MOCK_CRIT_POS|MOCK_CRIT_R|MOCK_CRIT_ARROWS|MOCK_N|MOCK_RIGHT_RATE|MOCK_LIMIT_MS|MOCK_SPREAD_TYPES|MOCK_QUOTA|MOCK_MUST|MOCK_MUST_SOLO|MOCK_TRIO_PERM|MOCK_CHECK_STU|MOCK_TRIO_ALGO_SHAPES|MOCK_ALIAS|MOCK_CATS|MOCK_BOX_TYPES|MOCK_ITEM_TYPES)\b/gm, 'global.$1')
   .replace(/^let MOCK_CACHE/m, 'global.MOCK_CACHE').replace(/^let MOCK_CAT_OF/m, 'global.MOCK_CAT_OF')
   .replace(/^let MOCK_CLOCK/m, 'global.MOCK_CLOCK'));
 
 
-// 범주(스토아학파 등)나 별칭(양명)으로 묶인 이름은 그 구성원·별칭의 이름으로 시작해도 같은 사람이다
+// 범주(스토아학파)·별칭(양명)으로 묶인 이름, 주제로 갈라 놓은 이름(자유주의의 밀 · 영구평화론의 칸트)은
+// 그 구성원·별칭·본인의 이름으로 시작해도 같은 사람이다
+const MOCK_SPLIT_NAMES = { '자유주의':['밀'], '영구평화론':['칸트'] };
 function ownNames(n){
-  return [n].concat(MOCK_CATS[n] || [], n === '자유주의' ? ['밀'] : [], Object.keys(MOCK_ALIAS).filter(k=> MOCK_ALIAS[k] === n));
+  return [n].concat(MOCK_CATS[n] || [], MOCK_SPLIT_NAMES[n] || [], Object.keys(MOCK_ALIAS).filter(k=> MOCK_ALIAS[k] === n));
 }
 function own(txt, n){ return ownNames(n).some(m=> txt.indexOf(m) === 0); }
 
@@ -118,7 +120,8 @@ function trioSet(who){
       m[name] = ans;
     };
     mockSourceItems().forEach(it=>{
-      const pr = mockSplitPair(it.text, names);
+      // 주제로 갈라 놓은 이름(자유주의의 밀 · 영구평화론의 칸트)이 출제기와 똑같이 읽히도록 topics 를 넘긴다
+      const pr = mockSplitPair(it.text, names, it.topics);
       if(pr){
         if(it.answer === 'O'){
           const body = pr.body.replace(/^모두\s*/, '');
@@ -126,12 +129,12 @@ function trioSet(who){
         }
         return;
       }
-      const df = mockSplitDiff(it.text, names);
+      const df = mockSplitDiff(it.text, names, it.topics);
       if(df){
         if(it.answer === 'O'){ put(df.body, df.a, 'O'); put(df.body, df.b, 'X'); }
         return;
       }
-      const sp = mockSplit(it.text, names);
+      const sp = mockSplit(it.text, names, it.topics);
       if(sp) put(sp.body, sp.name, it.answer);
     });
   }
@@ -342,14 +345,24 @@ for(let d=1; d<=40 * SIZES.length; d++){
         ok((p.join('') === truth) === (pi === q.ans), tag + ' ' + (pi+1) + '번 학생 패턴이 정답과 어긋남');
       });
       /* 위에서 아래로 한 줄씩 맞춰 보며 후보를 지워 나가는 문항이다.
-         마지막 줄을 보기 전에 답이 하나로 좁혀지면 아래 줄이 장식이 된다. */
+         배치 꼴은 하나가 아니다 — 기출 셋을 재 보면 2·1·0·1 과 2·1·1·0 이 나온다.
+         그래서 4→3→2→1 을 강요하지 않고 아래 넷만 본다. */
       const tr = q.items.map(x=> x.ok ? 1 : 0);
       const left = k=> q.pats.filter(p=>{ for(let i=0;i<k;i++) if(p[i] !== tr[i]) return false; return true; }).length;
-      ok(left(4) === 1, tag + ' 네 줄을 다 봐도 후보가 하나가 아님 (' + left(4) + ')');
-      ok(left(3) >= 2, tag + ' 세 줄만 보고 답이 나옴 — 마지막 줄이 장식이 된다');
-      for(let k=1;k<4;k++) ok(left(k) >= left(k+1), tag + ' 후보 수가 줄지 않음');
-      leftHist[[left(1), left(2), left(3), left(4)].join('→')] =
-        (leftHist[[left(1), left(2), left(3), left(4)].join('→')] || 0) + 1;
+      const seq = [5, left(1), left(2), left(3), left(4)];
+      ok(left(4) === 1, tag + ' 네 줄을 다 맞춰 봐도 후보가 하나가 아님 (' + left(4) + ')');
+      ok(left(2) >= 2, tag + ' 두 줄만 보고 답이 나옴 — 아래 두 줄이 통째로 장식이 된다');
+      for(let k=0;k<4;k++) ok(seq[k] >= seq[k+1], tag + ' 후보 수가 줄지 않음');
+      // 아무도 못 떨어뜨리는 줄은 많아야 하나 — 네 줄 가운데 셋은 일을 해야 한다
+      const drops = [0,1,2,3].map(k=> seq[k] - seq[k+1]);
+      ok(drops.filter(x=> x === 0).length <= 1, tag + ' 아무도 못 떨어뜨리는 줄이 둘 이상 (' + drops.join('·') + ')');
+      ok(drops[0] >= 1, tag + ' 첫 줄이 아무도 못 떨어뜨림');
+      // 어느 줄도 다섯 학생이 똑같아서는 안 된다
+      for(let r=0;r<4;r++) ok(new Set(q.pats.map(p=> p[r])).size === 2,
+        tag + ' ' + (r+1) + '번 줄이 다섯 학생 모두 같다 — 장식 줄');
+      // 해설에 적는 후보 수와 실제가 같아야 한다
+      if(q.left) ok(q.left.join('→') === seq.join('→'), tag + ' 해설의 후보 수가 실제와 다름');
+      leftHist[drops.join('·')] = (leftHist[drops.join('·')] || 0) + 1;
     } else if(q.type === 'qpair' || q.type === 'qbox'){
       if(q.type === 'qpair') qpairQ++; else qboxQ++;
       ok(mockCanon(q.psA.name, [q.psA.topic]) === q.a, tag + ' 갑 제시문 불일치');
@@ -504,7 +517,7 @@ for(let d=1; d<=40 * SIZES.length; d++){
        TODAY + ' 그림 문항 ' + (figAt[i-1]+1) + '번과 ' + (figAt[i]+1) + '번이 붙어 있다');
   }
 
-  const si = set.findIndex(q=> !!q.choices && q.choices.length === 5);
+  const si = set.findIndex(q=> !!q.choices && q.choices.length === 5 && !MOCK_BOX_TYPES[q.type] && !MOCK_ITEM_TYPES[q.type]);
   ok(bi >= 0 && si >= 0, '별표 테스트용 문항 없음');
   const run = { picks:[], guess:[] };
   set.forEach((q,i)=>{ run.picks[i] = q.ans; });          // 전부 맞힘
@@ -577,8 +590,8 @@ for(let d=1; d<=40 * SIZES.length; d++){
   ok(r.starred.length > 0 && r.starred.every(id=> STATE.ox.stars[id]), '제출 때 별표가 안 붙음');
   // 별표는 OMR 답 기준 — 2번(빈칸)은 선지 전부
   const q2 = set6[1];
-  const boxy = { box:1, venn:1, algo:1, trioVenn:1 };   // 3중 벤도 items 에 선지가 있다
-  const list2 = boxy[q2.type] ? q2.items : q2.choices;
+  // 보기형·문장 묶음형(체크표·점수 환산·서술형)은 선지가 items 에 있다
+  const list2 = (MOCK_BOX_TYPES[q2.type] || MOCK_ITEM_TYPES[q2.type]) ? q2.items : q2.choices;
   ok(list2.every(c=> STATE.ox.stars[c.id]), 'OMR 빈칸 문항 선지가 별표 안 됨 (' + list2.length + ')');
 
   newMockSet();
@@ -633,8 +646,10 @@ console.log('  샤프 2~4회 꼴 — 1인보기 ' + soloboxQ + ' · 1인질문�
 [['1인보기',soloboxQ],['1인질문형보기',qsoloboxQ],['점수환산',scoreQ],['서술형',essayQ],
  ['공통입장',sameQ],['공통입장보기',sameboxQ],['1:1비판',crit2Q]]
   .forEach(([nm, v])=> ok(v > 0, nm + ' 유형이 한 번도 안 나옴'));
-console.log('  체크표 후보가 줄어드는 꼴(1→2→3→4줄) — ' +
+console.log('  체크표 줄마다 떨어뜨린 수 — ' +
             Object.keys(leftHist).sort().map(k=> k + ' ' + leftHist[k]).join(' · '));
+ok(Object.keys(leftHist).length >= 4,
+   '체크표 배치 꼴이 ' + Object.keys(leftHist).length + '가지뿐 — 여러 꼴이 나와야 한다');
 console.log('  3중 순서도 모양 — ' + MOCK_TRIO_ALGO_SHAPES.map(s=> s.k + ' ' + (shapeHist[s.k] || 0)).join(' · '));
 MOCK_TRIO_ALGO_SHAPES.forEach(s=> ok((shapeHist[s.k] || 0) > 0, '3중 순서도 모양 ' + s.k + ' 가 한 번도 안 나옴'));
 const hist = (h)=> Object.keys(h).sort().map(k=> k + '문항 ' + h[k] + '세트').join(' · ');
