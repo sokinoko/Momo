@@ -190,6 +190,24 @@ function fitHeroKao(){
   }
 }
 
+// 시험장 주의사항 — 형석이 시험지에 손으로 적어 둔 것을 옮겼다. 홈 맨 위에 늘 뜬다.
+const EXAM_ROOM_NOTES = [
+  ['발문', '시험지에 적고 시작하기'],
+  ['5문제씩', '5문제씩 풀고 3초 심호흡 이후 풀기'],
+  ['단언 금지', '정답 단언하지 말기 — 정답을 짜맞추는 경향 있음'],
+  ['제시문', '제시문 제대로 읽고 판단하기'],
+  ['첫 선택', '확실한 근거가 없는 이상 처음 찍었던 정답 바꾸지 않기 — 첫 선택을 믿어라'],
+  ['끝까지', '확실해 보여도 선지에 세모 치고 모든 선지 끝까지 읽기'],
+];
+function examRoomBox(){
+  return `<section class="hard-box exam-room" aria-label="시험장 주의사항">
+      <div class="er-title">시험장 주의사항</div>
+      <div class="er-lead">형석아, 너는 6번 문제 풀 때부터 점점 집중도가 떨어져 가니 <b>★</b></div>
+      <ol class="er-list">${EXAM_ROOM_NOTES.map(([k, t]) =>
+        `<li><b>${k}</b><span>${t}</span></li>`).join('')}</ol>
+    </section>`;
+}
+
 function renderHome(){
   const prog = overallProgress();
   const streak = STATE.streak.count || 0;
@@ -198,6 +216,7 @@ function renderHome(){
   const oxToday = oxHist[todayStr()] || {done:0, correct:0};
   return `
   <div class="screen">
+    ${examRoomBox()}
     <div class="hero hard-box">
       <button class="hero-kao-wrap" onclick="nextHeroKao()" aria-label="다음 그림">
         <pre id="heroKao" class="${heroKaoClass()}">${kaoHtml(HERO_KAO[heroKaoIdx()])}</pre>
