@@ -322,8 +322,11 @@ ok(!pool.pairs[mockPairKey('스토아학파', '스토아학파')], '같은 범�
       ok(new Set(ids).size === ids.length, c.n + ' ' + TODAY + ' 선지 겹침');
     }
   });
-  STATE.quiz = { setNo:0, run:null, mode:'theme', theme:['동학'] };
-  ok(mockThemeNames().length === 0, '선지가 모자란 학자는 고를 수 없음');
+  // 선지가 모자란 학자 — 이름을 박아 두면 회차를 켤 때마다 깨지므로 풀에서 직접 찾는다
+  const thin = Object.keys(pool.byName).filter(n=> !cands.some(c=> c.n === n))[0];
+  ok(!!thin, '테마 후보가 아닌 학자가 하나도 없음');
+  STATE.quiz = { setNo:0, run:null, mode:'theme', theme:[thin] };
+  ok(mockThemeNames().length === 0, '선지가 모자란 학자는 고를 수 없음 (' + thin + ')');
 }
 
 /* ---------- 방식 바꾸기 · 기록 · 새 세트 흐름 ---------- */
