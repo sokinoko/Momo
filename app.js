@@ -3030,7 +3030,14 @@ function buildFormalSet(){
       else c.order = mockTypeOrder(rng, all.filter(t=> MOCK_FORMAL_PLAIN_SOLO.indexOf(t) < 0))
                        .concat(mockTypeOrder(rng, types(MOCK_FORMAL_PLAIN_SOLO)));
     }
-    const r = mockGenQ(n, rng, c);
+    let r = mockGenQ(n, rng, c);
+    /* 3인 문항이 겹치면 그 단원 사람이 바닥나 자리가 빈다. 이 문항을 내고 나서 남은 자리보다
+       남은 사람이 적어지면 단독으로 물러난다 */
+    if(r && r.names.length > 1){
+      const avail = pool.usable.concat(pool.pairable).filter((m, i, a)=> a.indexOf(m) === i)
+        .filter(m=> !used[m] && !soloKeep[m] && !reserved[m] && bucketOf(m) === b && r.names.indexOf(m) < 0).length;
+      if(avail < left[b] - 1) r = mockGenQ(n, rng, Object.assign({}, c, { order:null, types:['right','wrong'] }));
+    }
     if(r){ put(r, b); return r; }
     return null;
   };
