@@ -2894,7 +2894,7 @@ document.addEventListener('DOMContentLoaded', ()=>{ if(NAV.view === 'home') adva
 let arcDebounce = null, arcComposing = false;
 // 입력칸은 다시 그리지 않고 결과 영역만 바꾼다 (전체를 다시 그리면 한글 조합이 풀려 자모가 흩어진다)
 function arcInput(v){
-  NAV.arcQ = v; NAV.arcName = null; NAV.arcKwLimit = 25;
+  NAV.arcQ = v; NAV.arcName = null; NAV.arcKwLimit = 25; NAV.arcPsKwLimit = 10;
   clearTimeout(arcDebounce);
   arcDebounce = setTimeout(arcRefreshBody, 150);
 }
@@ -2909,6 +2909,26 @@ function arcPick(enc){
   render();
   const sc = document.getElementById('scrollArea'); if(sc) sc.scrollTop = 0;
   if(window.scrollTo) window.scrollTo(0, 0);
+}
+// 제시문 본문 · 사상가 이름 · 출처에 검색어가 들어 있는 것 (띄어쓰기는 무시)
+function arcPsHits(q){
+  const key = q.replace(/\s+/g, '').toLowerCase();
+  if(!key) return [];
+  const has = s=> String(s || '').replace(/\s+/g, '').toLowerCase().includes(key);
+  // 출처는 저장 꼴(2027-수특-145)이 아니라 화면에 뜨는 이름(2027 수특 p.145 · 2027 10교)으로 맞춘다
+  const k2 = key.replace(/p\./g, '');
+  const src = p=> mockPsSrcLabel(p).replace(/\s+|p\./gi, '').toLowerCase();
+  return (typeof PASSAGES !== 'undefined' ? PASSAGES : []).filter(p=> !p.off && (has(p.text) || has(p.name) || has(p.by) || src(p).includes(k2)));
+}
+function arcPsKwMore(){ NAV.arcPsKwLimit = (NAV.arcPsKwLimit || 10) + 10; arcRefreshBody(); }
+function renderArcPsHit(p, q){
+  const known = arcIndex().people[p.name];
+  const nm = known ? `<a href="javascript:void(0)" onclick="arcPick('${encodeURIComponent(p.name)}')" style="color:var(--ink); text-decoration:none;"><b style="font-family:var(--font-serif);">${arcHighlight(p.name, q)}</b></a>`
+                   : `<b style="font-family:var(--font-serif);">${arcHighlight(p.name, q)}</b>`;
+  return `<div class="hard-box" style="padding:13px 14px; margin-bottom:9px;">
+    <div class="ox-meta" style="margin-bottom:8px;">${nm}${p.by ? `<span class="note">(${escHtml(p.by)})</span>` : ''}<span class="note">${arcHighlight(mockPsSrcLabel(p), q)}</span></div>
+    <div class="ps-body" style="font-size:13px;">${arcHighlight(p.text || '', q)}</div>
+  </div>`;
 }
 function arcKwMore(){ NAV.arcKwLimit = (NAV.arcKwLimit || 25) + 25; arcRefreshBody(); }
 function arcSetKwAns(v){ NAV.arcKwAns = v; NAV.arcKwLimit = 25; arcRefreshBody(); }
@@ -2964,7 +2984,11 @@ function arcBodyHtml(q){
       <label class="ox-check"><input type="checkbox" ${NAV.arcHide ? 'checked' : ''} onchange="arcToggleHide()"/> 정답·해설 가리기 <span class="note">(카드를 누르면 열려요)</span></label>`
       + kw.slice(0, lim).map(it=> renderArcOxCard({ it, self: /^cmp-/.test(it.id), kind: 'solo' }, q)).join('')
       + (kw.length > lim ? `<button class="btn btn-block" onclick="arcKwMore()">더 보기 (${kw.length - lim}개 남음)</button>` : '') : '';
-    body = (pHtml + kHtml) || `<div class="empty"><div class="ic">無</div>'${escHtml(q)}' 사상가도 선지도 찾지 못했어요</div>`;
+    const ps = arcPsHits(q), psLim = NAV.arcPsKwLimit || 10;
+    const sHtml = ps.length ? `<div class="section-title">제시문에 '${escHtml(q.trim())}' 포함 <span class="note">(${ps.length}편)</span></div>`
+      + ps.slice(0, psLim).map(p=> renderArcPsHit(p, q)).join('')
+      + (ps.length > psLim ? `<button class="btn btn-block" onclick="arcPsKwMore()">더 보기 (${ps.length - psLim}편 남음)</button>` : '') : '';
+    body = (pHtml + kHtml + sHtml) || `<div class="empty"><div class="ic">無</div>'${escHtml(q)}' 사상가도 선지도 제시문도 찾지 못했어요</div>`;
   } else {
     body = UNIT_ORDER.map(u=>{
       const list = A.list.filter(r=> r.unit === u).sort((a,b)=> a.name < b.name ? -1 : 1);
@@ -2981,9 +3005,9 @@ function renderArchive(){
   const q = NAV.arcQ || '';
   return `<div class="screen">
     <div class="search-box arc-search">
-      <input type="text" placeholder="사상가 · 선지 키워드 · 출처 (예: 칸트, 정언 명령, 2027 10교)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
+      <input type="text" placeholder="사상가 · 선지·제시문 키워드 · 출처 (예: 칸트, 정언 명령, 2027 10교)" value="${escAttr(q)}" oninput="arcInput(this.value)"/>
     </div>
-    <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있어요.</div>
+    <div class="note" style="margin:-4px 2px 10px;">이름을 고르면 선지 · 제시문 · 개념 필기 · 흐름으로 읽기가 한곳에 모여요. 별칭(양명 → 왕수인)으로도 찾을 수 있고, 낱말을 치면 선지와 제시문 본문에서도 찾아요.</div>
     <div id="arc-body">${arcBodyHtml(q)}</div>
   </div>`;
 }
