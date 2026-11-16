@@ -309,6 +309,15 @@ function mockTodayLine(){
 /* ---------- 사상가별 정리 : 목록 ---------- */
 function renderTopics(){
   const q = NAV.searchQ.trim();
+  return `<div class="screen">
+    <div class="search-box">
+      <input type="text" placeholder="개념·용어 검색 (예: 격물치지)" value="${escAttr(NAV.searchQ)}" oninput="onSearchInput(this.value)"/>
+    </div>
+    <div id="topics-body">${topicsBodyHtml(q)}</div>
+  </div>`;
+}
+/* 검색 결과만 다시 그린다 — 입력창까지 새로 만들면 조합 중인 한글이 끊긴다 */
+function topicsBodyHtml(q){
   let matches = null;
   if(q){
     matches = [];
@@ -328,7 +337,7 @@ function renderTopics(){
     body = matches.length ? matches.slice(0,40).map(m=>`
       <div class="hard-box topic-row" onclick="go('topicDetail',{topicId:'${m.topicId}'})">
         <div class="info"><div class="tt">${m.topicTitle}</div><div class="ss">${highlightQ(m.snippet,q)}</div></div>
-      </div>`).join('') : `<div class="empty"><div class="ic">無</div>'${q}'에 대한 검색 결과가 없어요</div>`;
+      </div>`).join('') : `<div class="empty"><div class="ic">無</div>'${escHtml(q)}'에 대한 검색 결과가 없어요</div>`;
   } else {
     body = UNIT_ORDER.map(u=>{
       const topics = DATA.filter(t=>t.unit===u).sort((a,b)=>a.order-b.order);
@@ -345,12 +354,7 @@ function renderTopics(){
       `).join('');
     }).join('');
   }
-  return `<div class="screen">
-    <div class="search-box">
-      <input type="text" placeholder="개념·용어 검색 (예: 격물치지)" value="${escAttr(q)}" oninput="onSearchInput(this.value)"/>
-    </div>
-    ${body}
-  </div>`;
+  return body;
 }
 function renderTopicRow(t){
   const total = topicLineCount(t), done = topicCheckedCount(t);
@@ -371,7 +375,11 @@ let searchDebounce = null;
 function onSearchInput(v){
   NAV.searchQ = v;
   clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(()=>{ render(); const el=document.querySelector('.search-box input'); if(el){el.focus(); el.setSelectionRange(v.length,v.length);} }, 120);
+  searchDebounce = setTimeout(()=>{
+    const el = document.getElementById('topics-body');
+    if(el) el.innerHTML = topicsBodyHtml(NAV.searchQ.trim());
+    else render();
+  }, 120);
 }
 
 /* ---------- 사상가 상세 ---------- */
